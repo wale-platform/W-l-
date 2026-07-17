@@ -1,0 +1,6 @@
+{
+  "name": "WALE",
+  "description": "An AI-native student housing platform that connects renters directly with verified landlords.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
