@@ -10,6 +10,7 @@ export const mockLandlords: Landlord[] = [
     verified: true,
     responseTime: '< 1 hour',
     memberSince: '2021',
+    phone: '+234 803 456 7890',
   },
   {
     id: 'l2',
@@ -20,6 +21,7 @@ export const mockLandlords: Landlord[] = [
     verified: true,
     responseTime: '< 3 hours',
     memberSince: '2022',
+    phone: '+234 812 345 6789',
   },
   {
     id: 'l3',
@@ -30,6 +32,7 @@ export const mockLandlords: Landlord[] = [
     verified: true,
     responseTime: '< 24 hours',
     memberSince: '2020',
+    phone: '+234 905 123 4567',
   }
 ];
 

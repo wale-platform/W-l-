@@ -3,7 +3,7 @@ import { User } from '../types';
 
 interface AuthContextType {
   user: User | null;
-  login: (email: string, role: 'tenant' | 'landlord') => void;
+  login: (email: string, role: 'tenant' | 'landlord' | 'lawyer') => void;
   logout: () => void;
 }
 
@@ -12,14 +12,18 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
 
-  const login = (email: string, role: 'tenant' | 'landlord') => {
+  const login = (email: string, role: 'tenant' | 'landlord' | 'lawyer') => {
     // Mock login logic
     const mockUser: User = {
-      id: role === 'tenant' ? 't1' : 'l1',
-      name: role === 'tenant' ? 'Ibn Marzuk' : 'Wale Landlord',
+      id: role === 'tenant' ? 't1' : role === 'landlord' ? 'l1' : 'law1',
+      name: role === 'tenant' ? 'Ibn Marzuk' : role === 'landlord' ? 'Wale Landlord' : 'Barr. Tunde Williams',
       email,
       role,
-      avatar: role === 'tenant' ? 'https://i.pravatar.cc/150?img=12' : 'https://i.pravatar.cc/150?img=11',
+      avatar: role === 'tenant' 
+        ? 'https://i.pravatar.cc/150?img=12' 
+        : role === 'landlord' 
+          ? 'https://i.pravatar.cc/150?img=11' 
+          : 'https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&q=80&w=150',
     };
     setUser(mockUser);
   };

@@ -15,6 +15,8 @@ import { PropertyDetailsPage } from './pages/PropertyDetails';
 import { LoginPage } from './pages/Login';
 import { TenantDashboard } from './pages/dashboard/TenantDashboard';
 import { LandlordDashboard } from './pages/dashboard/LandlordDashboard';
+import { LawyerDashboard } from './pages/dashboard/LawyerDashboard';
+import { LawyersPage } from './pages/Lawyers';
 import { AIHomeMatchPage } from './pages/AIHomeMatch';
 import { ChatPage } from './pages/Chat';
 import { BookingPage } from './pages/Booking';
@@ -32,11 +34,13 @@ export default function App() {
               <Route path="/" element={<HomePage />} />
               <Route path="/properties" element={<PropertiesPage />} />
               <Route path="/properties/:id" element={<PropertyDetailsPage />} />
+              <Route path="/lawyers" element={<LawyersPage />} />
               <Route path="/map" element={<MapExplorer />} />
               <Route path="/ai-match" element={<AIHomeMatchPage />} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/dashboard/tenant" element={<TenantDashboard />} />
               <Route path="/dashboard/landlord" element={<LandlordDashboard />} />
+              <Route path="/dashboard/lawyer" element={<LawyerDashboard />} />
               <Route path="/chat" element={<ChatPage />} />
               <Route path="/booking" element={<BookingPage />} />
             </Routes>

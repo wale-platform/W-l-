@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { MapPin, Bed, Bath, ShieldCheck, Check, Calendar, MessageCircle, Heart, Share, Building2 } from 'lucide-react';
+import { MapPin, Bed, Bath, ShieldCheck, Check, Calendar, MessageCircle, Heart, Share, Building2, Phone } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { mockProperties } from '../data/mock';
 import { formatCurrency } from '../lib/utils';
@@ -184,7 +184,7 @@ export function PropertyDetailsPage() {
               </div>
 
               {/* Landlord Profile */}
-              <div className="pt-6 border-t border-gray-100">
+              <div className="pt-6 border-t border-gray-100 space-y-4">
                 <div className="flex items-center gap-4">
                   <img 
                     src={property.landlord.avatar} 
@@ -199,6 +199,19 @@ export function PropertyDetailsPage() {
                     </div>
                   </div>
                 </div>
+
+                {property.landlord.phone && (
+                  <div className="bg-gray-50 border border-gray-100 rounded-2xl p-3.5 flex flex-col gap-1.5">
+                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Direct Phone Contact</span>
+                    <a 
+                      href={`tel:${property.landlord.phone}`} 
+                      className="flex items-center gap-2 text-sm text-primary font-bold hover:underline transition-all"
+                    >
+                      <Phone size={14} className="text-primary shrink-0" />
+                      <span>{property.landlord.phone}</span>
+                    </a>
+                  </div>
+                )}
               </div>
 
             </div>

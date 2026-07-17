@@ -25,6 +25,7 @@ export function Navbar() {
     { name: 'Home', path: '/' },
     { name: 'Map', path: '/map' },
     { name: 'Browse Properties', path: '/properties' },
+    { name: 'Verified Lawyers', path: '/lawyers' },
     { name: 'AI Match', path: '/ai-match' },
   ];
 
@@ -68,7 +69,13 @@ export function Navbar() {
           <div className="hidden md:flex items-center gap-4">
             {user ? (
               <>
-                <Link to={user.role === 'tenant' ? '/dashboard/tenant' : '/dashboard/landlord'}>
+                <Link to={
+                  user.role === 'tenant' 
+                    ? '/dashboard/tenant' 
+                    : user.role === 'landlord' 
+                      ? '/dashboard/landlord' 
+                      : '/dashboard/lawyer'
+                }>
                   <Button variant="glass" size="sm">Dashboard</Button>
                 </Link>
                 <Button variant="outline" size="sm" onClick={logout} className="text-white border-white/20 hover:bg-white/10">Logout</Button>
@@ -119,7 +126,13 @@ export function Navbar() {
               <div className="h-px bg-white/10 my-2" />
               {user ? (
                 <>
-                  <Link to={user.role === 'tenant' ? '/dashboard/tenant' : '/dashboard/landlord'} onClick={() => setMobileMenuOpen(false)}>
+                  <Link to={
+                    user.role === 'tenant' 
+                      ? '/dashboard/tenant' 
+                      : user.role === 'landlord' 
+                        ? '/dashboard/landlord' 
+                        : '/dashboard/lawyer'
+                  } onClick={() => setMobileMenuOpen(false)}>
                     <Button variant="glass" fullWidth className="justify-start">Dashboard</Button>
                   </Link>
                   <Button variant="outline" fullWidth className="justify-start text-white border-white/20 hover:bg-white/10" onClick={() => { logout(); setMobileMenuOpen(false); }}>Logout</Button>
