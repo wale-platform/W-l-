@@ -2,24 +2,29 @@
 @import "tailwindcss";
 
 @theme {
-  --color-primary: #0F766E;
-  --color-primary-dark: #0B5C56;
-  --color-primary-light: #128C82;
-  --color-secondary: #FFFFFF;
-  --color-accent: #D4A017;
-  --color-accent-light: #E0B438;
-  --color-gray-900: #111827;
-  --color-gray-800: #1F2937;
-  --color-gray-700: #374151;
-  --color-gray-600: #4B5563;
-  --color-gray-500: #6B7280;
-  --color-gray-400: #9CA3AF;
-  --color-gray-300: #D1D5DB;
-  --color-gray-200: #E5E7EB;
-  --color-gray-100: #F3F4F6;
-  --color-gray-50: #F9FAFB;
-  --color-background: #FAFAFA;
+  --color-primary: #FF6B4A;
+  --color-primary-dark: #E05333;
+  --color-primary-light: #FF846B;
+  --color-secondary: #071426;
+  --color-accent: #14B8A6;
+  --color-accent-light: #2DD4BF;
+  --color-navy: #071426;
+  --color-coral: #FF6B4A;
+  --color-teal: #14B8A6;
+  --color-slate-neutral: #64748B;
+  --color-light-bg: #F8FAFC;
   --color-surface: #FFFFFF;
+  --color-gray-900: #0F172A;
+  --color-gray-800: #1E293B;
+  --color-gray-700: #334155;
+  --color-gray-600: #475569;
+  --color-gray-500: #64748B;
+  --color-gray-400: #94A3B8;
+  --color-gray-300: #CBD5E1;
+  --color-gray-200: #E2E8F0;
+  --color-gray-100: #F1F5F9;
+  --color-gray-50: #F8FAFC;
+  --color-background: #071426;
 
   --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
   
@@ -32,15 +37,15 @@
 
 @layer base {
   body {
-    @apply font-sans bg-[var(--color-background)] text-gray-900 antialiased selection:bg-primary selection:text-white;
+    @apply font-sans bg-white text-gray-900 antialiased selection:bg-primary selection:text-white;
   }
 }
 
 /* Architectural Design Patterns */
 .bg-blueprint {
   background-image: 
-    linear-gradient(to right, rgba(15, 118, 110, 0.03) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(15, 118, 110, 0.03) 1px, transparent 1px);
+    linear-gradient(to right, rgba(255, 107, 74, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 107, 74, 0.04) 1px, transparent 1px);
   background-size: 24px 24px;
 }
 
@@ -52,7 +57,7 @@
 }
 
 .bg-grid-pattern {
-  background-image: radial-gradient(rgba(15, 118, 110, 0.1) 1px, transparent 1px);
+  background-image: radial-gradient(rgba(20, 184, 166, 0.1) 1px, transparent 1px);
   background-size: 16px 16px;
 }
 
@@ -66,7 +71,7 @@
   position: absolute;
   width: 8px;
   height: 8px;
-  border: 1px solid rgba(15, 118, 110, 0.3);
+  border: 1px solid rgba(255, 107, 74, 0.3);
 }
 
 .architectural-border::before {

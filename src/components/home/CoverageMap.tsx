@@ -1,6 +1,8 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { MapPin } from 'lucide-react';
+import { MapPin, Map as MapIcon } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Button } from '../ui/Button';
 
 export function CoverageMap() {
   const areas = [
@@ -16,10 +18,15 @@ export function CoverageMap() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center max-w-2xl mx-auto mb-16 relative z-10">
           <h2 className="text-3xl font-bold text-gray-900 mb-4">Coverage Map</h2>
-          <p className="text-gray-600">Explore verified student housing clusters across Kwara State's major tertiary institution areas.</p>
+          <p className="text-gray-600 mb-6">Explore verified student housing clusters across Kwara State's major tertiary institution areas.</p>
+          <Link to="/map">
+            <Button size="lg" className="shadow-lg hover:scale-105 transition-transform">
+              <MapIcon size={20} className="mr-2" />
+              Open Interactive Map
+            </Button>
+          </Link>
         </div>
-
-        <div className="relative max-w-4xl mx-auto h-[500px] bg-white rounded-3xl border border-gray-200 shadow-sm p-4 architectural-border">
+        <Link to="/map" className="block relative max-w-4xl mx-auto h-[500px] bg-white rounded-3xl border border-gray-200 shadow-sm p-4 architectural-border group cursor-pointer overflow-hidden hover:shadow-xl transition-shadow">
           {/* Subtle Map Background Pattern */}
           <div className="absolute inset-4 rounded-2xl bg-[url('https://images.unsplash.com/photo-1524661135-423995f22d0b?auto=format&fit=crop&q=80&w=1200')] opacity-5 bg-cover bg-center mix-blend-luminosity"></div>
           
@@ -69,7 +76,7 @@ export function CoverageMap() {
               <span className="w-2 h-2 rounded-full border border-gray-400 border-dashed inline-block"></span> Upcoming Areas
             </div>
           </div>
-        </div>
+        </Link>
       </div>
     </section>
   );

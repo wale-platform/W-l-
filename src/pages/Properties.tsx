@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { motion } from 'motion/react';
-import { Search, SlidersHorizontal } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { PropertyCard } from '../components/ui/PropertyCard';
 import { Button } from '../components/ui/Button';
 import { mockProperties } from '../data/mock';
@@ -52,10 +52,6 @@ export function PropertiesPage() {
               />
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" className="flex items-center gap-2">
-                <SlidersHorizontal size={18} />
-                Filters
-              </Button>
               <Button>Search</Button>
             </div>
           </div>

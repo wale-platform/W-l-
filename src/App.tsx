@@ -19,6 +19,8 @@ import { AIHomeMatchPage } from './pages/AIHomeMatch';
 import { ChatPage } from './pages/Chat';
 import { BookingPage } from './pages/Booking';
 
+import { MapExplorer } from './pages/map/MapExplorer';
+
 export default function App() {
   return (
     <AuthProvider>
@@ -30,6 +32,7 @@ export default function App() {
               <Route path="/" element={<HomePage />} />
               <Route path="/properties" element={<PropertiesPage />} />
               <Route path="/properties/:id" element={<PropertyDetailsPage />} />
+              <Route path="/map" element={<MapExplorer />} />
               <Route path="/ai-match" element={<AIHomeMatchPage />} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/dashboard/tenant" element={<TenantDashboard />} />
