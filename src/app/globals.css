@@ -1,26 +1,140 @@
 @import "tailwindcss";
 
+/*
+ * WALE Housing design tokens.
+ *
+ * Tailwind v4 is CSS-first: tokens declared in `@theme` become utilities
+ * (`--color-brand-600` -> `bg-brand-600`). There is deliberately no
+ * tailwind.config.js — adding one would split the source of truth.
+ *
+ * The brand scale is derived from the WALE logo: the dark building is
+ * brand-950 (#0B3B2E), the lighter building brand-600 (#2E8B57).
+ */
+@theme {
+  --color-brand-50: #eff9f4;
+  --color-brand-100: #d8f0e3;
+  --color-brand-200: #b3e1ca;
+  --color-brand-300: #82caa9;
+  --color-brand-400: #4fae85;
+  --color-brand-500: #2e8b57;
+  --color-brand-600: #24734a;
+  --color-brand-700: #1d5c3c;
+  --color-brand-800: #174a32;
+  --color-brand-900: #123c2b;
+  --color-brand-950: #0b3b2e;
+
+  /* Warm sand accent — used sparingly for emphasis against all the green. */
+  --color-sand-50: #fbf8f1;
+  --color-sand-100: #f5eedd;
+  --color-sand-200: #ead9b8;
+  --color-sand-300: #dcbf8a;
+  --color-sand-400: #cfa463;
+  --color-sand-500: #c08d47;
+  --color-sand-600: #a4713a;
+
+  --color-ink-50: #f7f8f8;
+  --color-ink-100: #eeefef;
+  --color-ink-200: #d9dcdb;
+  --color-ink-300: #b8bebc;
+  --color-ink-400: #909996;
+  --color-ink-500: #717b78;
+  --color-ink-600: #5a6360;
+  --color-ink-700: #4a514f;
+  --color-ink-800: #3f4442;
+  --color-ink-900: #191d1c;
+  --color-ink-950: #0e1110;
+
+  /* Semantic aliases. Verification badges and alerts reference these
+   * rather than raw hues, so meaning stays stable if the palette shifts. */
+  --color-success: #1a7f4b;
+  --color-success-subtle: #e6f6ec;
+  --color-warning: #a3620a;
+  --color-warning-subtle: #fdf3e2;
+  --color-danger: #b42318;
+  --color-danger-subtle: #fdeceb;
+  --color-info: #175cd3;
+  --color-info-subtle: #eaf1fd;
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  --radius-card: 0.875rem;
+  --radius-field: 0.625rem;
+
+  --shadow-card: 0 1px 2px 0 rgb(14 17 16 / 0.04), 0 4px 16px -4px rgb(14 17 16 / 0.08);
+  --shadow-lifted: 0 2px 4px 0 rgb(14 17 16 / 0.04), 0 12px 32px -8px rgb(14 17 16 / 0.14);
+
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/*
+ * Light-only for pass 1 so the brand reads consistently. The scaffold
+ * shipped a `prefers-color-scheme: dark` block that forced the whole site
+ * to near-black; it is intentionally gone. Tokens above are structured so
+ * a dark theme can be layered on later without touching components.
+ */
 :root {
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: var(--color-ink-900);
+  color-scheme: light;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+@layer base {
+  * {
+    border-color: var(--color-ink-200);
+  }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    /* The scaffold hardcoded Arial here, discarding the loaded Geist
+     * variable font. Route through the token instead. */
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Single global focus treatment so every interactive element is
+   * keyboard-visible by default rather than per-component. */
+  :focus-visible {
+    outline: 2px solid var(--color-brand-500);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer utilities {
+  /* Skip-link: visually hidden until focused. */
+  .sr-only-focusable:not(:focus):not(:focus-within) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
