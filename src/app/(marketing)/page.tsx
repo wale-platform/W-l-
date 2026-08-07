@@ -7,6 +7,7 @@ import {
   GraduationCap,
   Eye,
   HandCoins,
+  MapPin,
 } from "lucide-react";
 import { Container, Section, SectionHeading } from "@/components/layout/Container";
 import { HeroSearch } from "@/components/marketing/HeroSearch";
@@ -98,7 +99,7 @@ export default function HomePage() {
       </Section>
 
       {/* --------------------------------------------------- How it works -- */}
-      <Section>
+      <Section id="how-it-works" className="scroll-mt-20">
         <Container size="wide" className="flex flex-col gap-14">
           <SectionHeading
             eyebrow="How it works"
@@ -159,6 +160,47 @@ export default function HomePage() {
               </Card>
             ))}
           </div>
+        </Container>
+      </Section>
+
+      {/* -------------------------------------------------- Universities -- */}
+      <Section id="universities" spacing="tight" className="scroll-mt-20 bg-ink-50/70">
+        <Container size="wide" className="flex flex-col gap-12">
+          <SectionHeading
+            eyebrow="Coverage"
+            title="Universities we cover"
+            lead="Coverage means agents on the ground who can verify a listing in person — not just a list of properties someone emailed us."
+          />
+
+          <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {universities.map((uni) => (
+              <li key={uni.id}>
+                <Link
+                  href={`/properties?university=${uni.id}`}
+                  className="group flex h-full flex-col gap-1 rounded-card border border-ink-200 bg-white p-5 transition-colors hover:border-brand-400 hover:bg-brand-50/40"
+                >
+                  <span className="text-sm font-semibold text-brand-700">
+                    {uni.short}
+                  </span>
+                  <span className="text-sm font-medium leading-snug text-ink-900">
+                    {uni.name}
+                  </span>
+                  <span className="mt-1 flex items-center gap-1.5 text-xs text-ink-500">
+                    <MapPin aria-hidden="true" className="size-3.5" />
+                    {uni.city}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+
+          <p className="text-center text-sm text-ink-600">
+            Studying somewhere else?{" "}
+            <Link href="/contact" className="font-medium text-brand-700 hover:underline">
+              Tell us where
+            </Link>{" "}
+            — we prioritise new towns by demand.
+          </p>
         </Container>
       </Section>
 

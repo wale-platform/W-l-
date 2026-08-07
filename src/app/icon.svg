@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!--
+    WALE favicon. The same glyph geometry as src/components/brand/Logo.tsx,
+    on a brand-950 ground so it reads against both light and dark browser
+    chrome. Static SVG rather than a generated ImageResponse: it stays crisp
+    at every size, needs no server render, and is the source these paths
+    already exist in.
+  -->
+  <rect width="64" height="64" rx="12" fill="#0b3b2e"/>
+  <path d="M6 58V25.5L29 6v52H6Z" fill="#2e8b57"/>
+  <path d="M32 58V18h26v40H32Z" fill="#4fae85"/>
+  <g fill="#0b3b2e">
+    <rect x="38" y="25" width="6" height="6" rx="1"/>
+    <rect x="48" y="25" width="6" height="6" rx="1"/>
+    <rect x="38" y="36" width="6" height="6" rx="1"/>
+    <rect x="48" y="36" width="6" height="6" rx="1"/>
+  </g>
+  <path d="M14 58V44a5 5 0 0 1 10 0v14H14Z" fill="#0b3b2e"/>
+</svg>
