@@ -1,0 +1,34 @@
+import js from "@eslint/js";
+import tseslint from "typescript-eslint";
+import prettier from "eslint-config-prettier";
+import globals from "globals";
+
+export default tseslint.config(
+  {
+    ignores: ["dist/**", "node_modules/**", "coverage/**", "prisma/migrations/**"],
+  },
+  js.configs.recommended,
+  ...tseslint.configs.recommended,
+  {
+    languageOptions: {
+      globals: { ...globals.node },
+      parserOptions: { ecmaVersion: 2022, sourceType: "module" },
+    },
+    rules: {
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
+      ],
+      "@typescript-eslint/no-explicit-any": "warn",
+      "no-console": ["warn", { allow: ["warn", "error"] }],
+      eqeqeq: ["error", "smart"],
+    },
+  },
+  {
+    files: ["tests/**/*.ts", "prisma/seed.ts"],
+    rules: {
+      "no-console": "off",
+    },
+  },
+  prettier,
+);

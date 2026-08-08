@@ -1,0 +1,200 @@
+// Wale Housing — Prisma schema
+// Datasource: PostgreSQL (Supabase in hosted environments).
+//   url       -> pooled connection, used by the app at runtime.
+//   directUrl -> direct connection, used by Prisma Migrate/Studio only.
+// See docs/frontend-analysis.md for how these shapes map to the frontend contract.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ──────────────────────────────────────────────────────────────── Users ──
+
+// Primary role for coarse authorization. A user is NOT limited to one
+// relationship with the platform: ownership is expressed through the
+// Property.owner relation, so a USER can also own listings without a role
+// change. Extend this enum (e.g. AGENT) without reshaping anything else.
+enum Role {
+  USER
+  LANDLORD
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  DEACTIVATED
+}
+
+model User {
+  id             String     @id @default(cuid())
+  email          String     @unique
+  // Stored split (per the product data model); the API also returns a
+  // computed `name` = "firstName lastName" for the frontend's single-field User.
+  firstName      String
+  lastName       String     @default("")
+  phone          String?
+  passwordHash   String
+  role           Role       @default(USER)
+  status         UserStatus @default(ACTIVE)
+  avatar         String?
+  // Student-focused signup collects a university id (e.g. "unilag"); optional
+  // so landlords/admins created later are not forced to have one.
+  university     String?
+  emailVerified  Boolean    @default(false)
+  emailVerifiedAt DateTime?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  sessions                Session[]
+  emailVerificationTokens EmailVerificationToken[]
+  passwordResetTokens     PasswordResetToken[]
+  properties              Property[]
+
+  @@index([role])
+  @@index([status])
+}
+
+// ────────────────────────────────────────────────────────────── Sessions ──
+
+// Opaque session tokens: the raw secret lives only in the httpOnly cookie.
+// We persist an HMAC-SHA256 hash so a database leak cannot reconstruct a
+// usable session. Enables logout, logout-all, and per-device revocation.
+model Session {
+  id         String   @id @default(cuid())
+  userId     String
+  tokenHash  String   @unique
+  userAgent  String?
+  ip         String?
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  lastUsedAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+// Short-lived, single-use tokens. Only the hash is stored (never the raw
+// token). `usedAt` marks consumption; expired/used rows are pruned lazily.
+model EmailVerificationToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ──────────────────────────────────────────────────────────── Properties ──
+
+// Enum VALUES for type/source deliberately match the frontend's Zod enums
+// verbatim so they cross the wire with zero mapping. Status is internal and is
+// serialized to the frontend's `verified` boolean (verified = VERIFIED).
+enum PropertyType {
+  studio
+  one_bedroom
+  two_bedroom
+  shared
+}
+
+enum PropertySource {
+  wale
+  agent
+  landlord
+}
+
+enum PropertyStatus {
+  DRAFT
+  PENDING_VERIFICATION
+  VERIFIED
+  REJECTED
+  SUSPENDED
+}
+
+model Property {
+  id          String         @id @default(cuid())
+  // The managing account, when one exists. Nullable because a listing's
+  // landlord/agent contact may not be a platform user (see contact* fields).
+  ownerId     String?
+  title       String
+  description String
+  price       Int // annual rent, whole NGN
+  type        PropertyType
+  bedrooms    Int            @default(1)
+  bathrooms   Int            @default(1)
+  source      PropertySource @default(wale)
+  status      PropertyStatus @default(DRAFT)
+
+  // Location (kept flat; PostGIS can be layered on later if geo queries arrive).
+  address      String
+  city         String
+  state        String
+  country      String  @default("Nigeria")
+  neighborhood String?
+  latitude     Float?
+  longitude    Float?
+  university   String? // university id, e.g. "unilag"
+
+  amenities     String[] @default([])
+  availableDate DateTime @db.Date
+
+  // Denormalized public contact shown on the listing (frontend `landlord`).
+  contactName  String
+  contactPhone String
+  contactEmail String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  owner  User?           @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  images PropertyImage[]
+
+  @@index([status])
+  @@index([university])
+  @@index([city])
+  @@index([type])
+  @@index([price])
+  @@index([createdAt])
+}
+
+model PropertyImage {
+  id         String   @id @default(cuid())
+  propertyId String
+  url        String
+  position   Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@index([propertyId])
+}
+
+// Deferred domains (messaging, notifications, verification workflow, wallet,
+// bookings, media assets) are intentionally NOT modelled yet — they are added
+// in their own phases to avoid speculative, unused tables. The relations above
+// are shaped so they can be introduced additively.
