@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import Link from "next/link";
 import { PropertyCard } from "@/components/ui/PropertyCard";
 import {
@@ -15,6 +18,7 @@ import {
 } from "@/components/ui";
 
 export default function LandlordPropertiesPage() {
+  const [showProperty, setShowProperty] = useState(true);
   return (
     <main>
       <Section>
@@ -28,9 +32,7 @@ export default function LandlordPropertiesPage() {
               title="My Properties"
               lead="View and manage the properties you have submitted to WALE."
             />
-
-        
-          </div>
+            </div>
 
           <Card>
             <CardHeader>

@@ -1,4 +1,7 @@
+import Link from "next/link";
+
 import {
+  Badge,
   Button,
   Card,
   CardBody,
@@ -9,6 +12,7 @@ interface PropertyCardProps {
   price: number;
   location: string;
   status: "pending" | "approved" | "rejected";
+  onDelete: () => void;
 }
 
 export function PropertyCard({
@@ -16,6 +20,7 @@ export function PropertyCard({
   price,
   location,
   status,
+  onDelete,
 }: PropertyCardProps) {
   return (
     <Card>
@@ -31,9 +36,37 @@ export function PropertyCard({
             </p>
           </div>
 
-          <span className="rounded-full bg-brand-50 px-3 py-1 text-xs font-medium text-brand-800">
+          <div className="flex flex-col items-end gap-1">
+                    <Badge
+                      tone={
+                        status === "approved"
+                          ? "success"
+                          : status === "rejected"
+                            ? "danger"
+                            : "warning"
+                      }
+                    >
             {status}
-          </span>
+                </Badge>
+
+                {status === "pending" && (
+                  <p className="text-xs text-warning">
+                     Waiting for verification
+                    </p>
+                    )}
+
+                    {status === "approved" && (
+                      <p className="text-xs text-success">
+                        Property is live
+                      </p>
+                    )}
+
+                    {status === "rejected" && (
+                      <p className="text-xs text-danger">
+                        Property needs attention
+                      </p>
+                    )}
+</div>
         </div>
 
         <p className="text-lg font-semibold text-ink-900">
@@ -41,13 +74,18 @@ export function PropertyCard({
         </p>
 
         <div className="flex gap-3">
-          <Button tone="outline" size="sm">
-            Edit
-          </Button>
+          <Link href="/landlord/properties/edit">
+            <Button tone="outline" size="sm">
+              Edit
+            </Button>
+          </Link>
 
-          <Button tone="danger" size="sm">
-            Delete
-          </Button>
+          <Button
+              tone="danger"
+              size="sm"
+              onClick={onDelete}>
+              Delete
+            </Button>
         </div>
       </CardBody>
     </Card>

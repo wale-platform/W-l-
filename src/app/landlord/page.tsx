@@ -74,6 +74,11 @@ export default function LandlordDashboard() {
                   View My Properties
                 </Button>
               </Link>
+              <Link href="/landlord/inspections">
+                  <Button tone="outline">
+                    Inspection Requests
+                  </Button>
+                </Link>
               </div>
             </CardBody>
           </Card>
