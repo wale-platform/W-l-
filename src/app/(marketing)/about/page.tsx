@@ -36,13 +36,13 @@ export default function AboutPage() {
   return (
     <>
       {/* -------------------------------------------------------- Hero -- */}
-      <Section as="div" spacing="loose" className="bg-ink-50/70">
+      <Section as="div" spacing="loose" className="bg-brand-500">
         <Container size="narrow">
           <div className="flex flex-col gap-6 text-center">
-            <h1 className="text-4xl font-semibold tracking-tight text-ink-900 sm:text-5xl">
+            <h1 className="text-4xl font-semibold tracking-tight text-brand-50 sm:text-5xl">
               Housing shouldn&apos;t mean guessing who to trust
             </h1>
-            <p className="text-lg leading-8 text-ink-600">
+            <p className="text-lg leading-8 text-brand-50/70">
               WALE exists because students in Nigeria lose money, time, and peace
               of mind to housing fraud every single session. We built the platform
               we wish had existed when we were looking.

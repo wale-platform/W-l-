@@ -8,20 +8,20 @@
  * tailwind.config.js — adding one would split the source of truth.
  *
  * The brand scale is derived from the WALE logo: the dark building is
- * brand-950 (#0B3B2E), the lighter building brand-600 (#2E8B57).
+ * brand-950 (#7a1737), the lighter building brand-600 (#b95b79).
  */
 @theme {
   --color-brand-50: #eff9f4;
-  --color-brand-100: #d8f0e3;
-  --color-brand-200: #b3e1ca;
-  --color-brand-300: #82caa9;
-  --color-brand-400: #4fae85;
-  --color-brand-500: #2e8b57;
-  --color-brand-600: #24734a;
-  --color-brand-700: #1d5c3c;
-  --color-brand-800: #174a32;
-  --color-brand-900: #123c2b;
-  --color-brand-950: #0b3b2e;
+  --color-brand-100: #f9eef2;
+  --color-brand-200: #f3dce4;
+  --color-brand-300: #e7b9c8;
+  --color-brand-400: #d58ca4;
+  --color-brand-500: #430c1f;
+  --color-brand-600: #b95b79;
+  --color-brand-700: #68132f;
+  --color-brand-800: #7a1737;
+  --color-brand-900: #561027;
+  --color-brand-950: #7a1737;
 
   /* Warm sand accent — used sparingly for emphasis against all the green. */
   --color-sand-50: #fbf8f1;

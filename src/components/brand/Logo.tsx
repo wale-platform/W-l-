@@ -18,7 +18,7 @@ type Tone = "color" | "mono" | "inverse";
 
 const glyphTones: Record<Tone, { dark: string; light: string; window: string }> = {
   // Two-tone green, matching the source mark.
-  color: { dark: "fill-brand-950", light: "fill-brand-500", window: "fill-white" },
+  color: { dark: "fill-brand-950", light: "fill-brand-950", window: "fill-white" },
   // Single-colour, inherits text colour — for dense or monochrome contexts.
   mono: { dark: "fill-current", light: "fill-current", window: "fill-white" },
   // For placement on dark brand backgrounds.

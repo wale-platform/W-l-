@@ -88,7 +88,7 @@ export default function HomePage() {
               <li key={uni.id}>
                 <Link
                   href={`/properties?university=${uni.id}`}
-                  className="inline-flex rounded-full border border-brand-700/70 px-3 py-1.5 text-xs font-medium text-brand-100 transition-colors hover:border-brand-500 hover:bg-brand-800/50"
+                  className="inline-flex rounded-full border border-brand-700/70 px-3 py-1.5 text-xs font-medium text-brand-50 transition-colors hover:border-brand-500 hover:bg-brand-800/50"
                 >
                   {uni.short}
                 </Link>
@@ -152,7 +152,7 @@ export default function HomePage() {
           <div className="grid gap-6 md:grid-cols-3">
             {trustPoints.map((point) => (
               <Card key={point.stat} className="flex flex-col gap-3 p-6">
-                <span className="flex size-10 items-center justify-center rounded-field bg-success-subtle text-success">
+                <span className="flex size-10 items-center justify-center rounded-field bg-brand-50 text-950">
                   <point.icon aria-hidden="true" className="size-5" />
                 </span>
                 <h3 className="font-semibold text-ink-900">{point.stat}</h3>
@@ -217,7 +217,7 @@ export default function HomePage() {
             </p>
             <div className="flex flex-col gap-3 sm:flex-row">
               <Link href="/register">
-                <Button size="lg" className="bg-white text-brand-900 hover:bg-brand-50">
+                <Button size="lg" className="bg-brand-600 text-white hover:bg-brand-700">
                   Create free account
                   <ArrowRight aria-hidden="true" className="size-4" />
                 </Button>
@@ -226,7 +226,7 @@ export default function HomePage() {
                 <Button
                   size="lg"
                   tone="outline"
-                  className="border-brand-700 bg-transparent text-white hover:bg-brand-900 hover:border-brand-600"
+                  className="border-brand-700 bg-brand-600 text-white hover:bg-brand-700 hover:border-brand-600"
                 >
                   Browse listings
                 </Button>
