@@ -76,3 +76,14 @@ export class TooManyRequestsError extends AppError {
     super(429, "RATE_LIMITED", message);
   }
 }
+
+/**
+ * The service is up but a dependency it needs (currently: the database) is not
+ * answering. Distinct from a 500: the request was valid and retrying later is
+ * the correct client behaviour, so this is safe to surface as "try again".
+ */
+export class ServiceUnavailableError extends AppError {
+  constructor(message = "Service temporarily unavailable. Please try again in a moment.") {
+    super(503, "SERVICE_UNAVAILABLE", message);
+  }
+}
