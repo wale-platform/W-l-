@@ -1,0 +1,13 @@
+{
+  // Typecheck config for CI / `npm run typecheck`.
+  //
+  // The main tsconfig.json deliberately includes `.next/dev/types/**/*.ts` so
+  // the editor type-checks route signatures. Those files are generated, and a
+  // `next build` racing a running `next dev` can leave a syntactically invalid
+  // one behind — which then fails type-checking with errors in code nobody
+  // wrote. This config checks first-party source only, so the gate reports on
+  // our code and nothing else. `next build` still performs the full check.
+  "extends": "./tsconfig.json",
+  "include": ["next-env.d.ts", "src/**/*.ts", "src/**/*.tsx"],
+  "exclude": ["node_modules", "backend", ".next"]
+}

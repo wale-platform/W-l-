@@ -50,7 +50,7 @@ export default function LandlordPropertiesPage() {
                 </h3>
 
                 <p className="max-w-md text-sm leading-6 text-ink-500">
-                  You haven't uploaded any properties yet. Add your first
+                  You haven&apos;t uploaded any properties yet. Add your first
                   property to start reaching students on WALE.
                 </p>
               </div>

@@ -12,13 +12,35 @@ import { z } from "zod";
 
 /* ---------------------------------------------------------------- User -- */
 
+/**
+ * Roles as the backend emits them (Prisma `Role` enum). The UI maps these to
+ * human labels — it must not invent its own vocabulary, or every real user
+ * fails to parse.
+ */
+export const roleSchema = z.enum(["USER", "LANDLORD", "ADMIN"]);
+
+export type Role = z.infer<typeof roleSchema>;
+
+/** Display labels for roles, kept next to the enum so they cannot drift. */
+export const roleLabels: Record<Role, string> = {
+  USER: "Tenant",
+  LANDLORD: "Landlord",
+  ADMIN: "Administrator",
+};
+
 export const userSchema = z.object({
   id: z.string(),
   email: z.string().email(),
+  // Computed server-side as "firstName lastName"; the split fields are also
+  // returned and are useful for pre-filling profile forms.
   name: z.string(),
-  role: z.enum(["student", "admin"]),
-  university: z.string().optional(),
+  firstName: z.string().optional(),
+  lastName: z.string().optional(),
+  phone: z.string().nullable().optional(),
+  role: roleSchema,
+  university: z.string().nullable().optional(),
   avatar: z.string().url().nullable().optional(),
+  emailVerified: z.boolean().optional(),
   createdAt: z.string().datetime(),
 });
 
@@ -124,19 +146,30 @@ export const registerSchema = z.object({
 export type LoginData = z.infer<typeof loginSchema>;
 export type RegisterData = z.infer<typeof registerSchema>;
 
+/**
+ * Auth is cookie-based: register/login set an httpOnly `wale_session` cookie
+ * and return only the user. There is deliberately no body token — one would
+ * imply JS-readable storage and defeat the httpOnly cookie.
+ */
 export const authResponseSchema = z.object({
   user: userSchema,
-  token: z.string(),
 });
 
 export type AuthResponse = z.infer<typeof authResponseSchema>;
 
 /* ----------------------------------------------------------- API Error -- */
 
+/**
+ * Flat error shape produced by the API client's error interceptor, which
+ * normalizes the backend's nested `{ error: { code, message, details } }`.
+ */
 export const apiErrorSchema = z.object({
   message: z.string(),
   code: z.string().optional(),
   field: z.string().optional(),
+  details: z
+    .array(z.object({ field: z.string().optional(), message: z.string() }))
+    .optional(),
 });
 
 export type ApiError = z.infer<typeof apiErrorSchema>;

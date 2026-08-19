@@ -61,7 +61,7 @@ export default function LandlordDashboard() {
 
             <CardBody className="flex flex-col items-center gap-4 py-12 text-center">
               <p className="text-ink-600">
-                You haven't uploaded any properties yet.
+                You haven&apos;t uploaded any properties yet.
               </p>
               <div className="flex gap-3">
               <Link href="/landlord/upload-property">
