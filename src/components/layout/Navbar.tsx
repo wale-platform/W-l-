@@ -28,6 +28,21 @@ export function Navbar() {
     };
   }, [open]);
 
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setIsLoggedIn(localStorage.getItem("wale_is_logged_in") === "true");
+    }
+  }, [pathname]);
+
+  const handleLogout = () => {
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("wale_is_logged_in");
+      setIsLoggedIn(false);
+    }
+  };
+
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
 
@@ -61,14 +76,29 @@ export function Navbar() {
           </nav>
 
           <div className="hidden items-center gap-2 lg:flex">
-            <Link href="/login">
-              <Button tone="ghost" size="sm">
-                Log in
-              </Button>
-            </Link>
-            <Link href="/register">
-              <Button size="sm">Create account</Button>
-            </Link>
+            {isLoggedIn ? (
+              <>
+                <Link href="/student">
+                  <Button tone="ghost" size="sm">
+                    Dashboard
+                  </Button>
+                </Link>
+                <Button tone="outline" size="sm" onClick={handleLogout}>
+                  Log out
+                </Button>
+              </>
+            ) : (
+              <>
+                <Link href="/login">
+                  <Button tone="ghost" size="sm">
+                    Log in
+                  </Button>
+                </Link>
+                <Link href="/signup">
+                  <Button size="sm">Create account</Button>
+                </Link>
+              </>
+            )}
           </div>
 
           <button
@@ -115,14 +145,27 @@ export function Navbar() {
               </ul>
 
               <div className="mt-4 flex flex-col gap-2 border-t border-ink-100 pt-4">
-                <Link href="/login">
-                  <Button tone="outline" block>
-                    Log in
-                  </Button>
-                </Link>
-                <Link href="/register">
-                  <Button block>Create account</Button>
-                </Link>
+                {isLoggedIn ? (
+                  <>
+                    <Link href="/student" className="w-full">
+                      <Button block>Dashboard</Button>
+                    </Link>
+                    <Button tone="outline" block onClick={handleLogout}>
+                      Log out
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Link href="/login" className="w-full">
+                      <Button tone="outline" block>
+                        Log in
+                      </Button>
+                    </Link>
+                    <Link href="/signup" className="w-full">
+                      <Button block>Create account</Button>
+                    </Link>
+                  </>
+                )}
               </div>
             </nav>
           </Container>

@@ -39,7 +39,7 @@ export const footerNav = [
       { label: "Browse homes", href: "/properties" },
       { label: "How it works", href: "/#how-it-works" },
       { label: "Universities", href: "/#universities" },
-      { label: "Create account", href: "/register" },
+      { label: "Create account", href: "/signup" },
     ],
   },
   {

@@ -2,15 +2,6 @@ import { NextResponse, type NextRequest } from "next/server";
 import { properties } from "@/lib/fixtures/properties";
 import type { Property } from "@/lib/api/schemas";
 
-/**
- * Mock properties endpoint.
- *
- * This stands in for the real backend. The client talks to it over real
- * HTTP through the same axios layer it will use in production, so
- * swapping to the live API is a `NEXT_PUBLIC_API_BASE_URL` change and
- * nothing else — no component or hook is aware this is a fixture.
- */
-
 /** Artificial latency so skeleton states are actually observable in dev. */
 const LATENCY_MS = 600;
 
@@ -41,6 +32,17 @@ function matches(property: Property, params: URLSearchParams): boolean {
   const maxPrice = params.get("maxPrice");
   if (maxPrice && property.price > Number(maxPrice)) return false;
 
+  // Filter by listing source (e.g. wale, landlord, agent)
+  const source = params.get("source");
+  if (source && property.source !== source) return false;
+
+  // Filter by availability (e.g. "immediate" or date-based)
+  const availability = params.get("availability");
+  if (availability === "immediate") {
+    const today = new Date().toISOString().split("T")[0];
+    if (property.availableDate > today) return false;
+  }
+
   // Only filter when explicitly true — absent means "show everything".
   if (params.get("verifiedOnly") === "true" && !property.verified) return false;
 
@@ -54,14 +56,27 @@ export async function GET(request: NextRequest) {
   const page = Math.max(1, Number(params.get("page")) || 1);
   const pageSize = Math.min(50, Math.max(1, Number(params.get("pageSize")) || 12));
 
+  // Filter
   const filtered = properties.filter((property) => matches(property, params));
 
-  const total = filtered.length;
+  // Sort
+  const sortBy = params.get("sortBy") || "newest";
+  const sorted = [...filtered];
+  if (sortBy === "price_asc") {
+    sorted.sort((a, b) => a.price - b.price);
+  } else if (sortBy === "price_desc") {
+    sorted.sort((a, b) => b.price - a.price);
+  } else {
+    // default to newest listing
+    sorted.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }
+
+  const total = sorted.length;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const start = (page - 1) * pageSize;
 
   return NextResponse.json({
-    properties: filtered.slice(start, start + pageSize),
+    properties: sorted.slice(start, start + pageSize),
     total,
     page,
     pageSize,

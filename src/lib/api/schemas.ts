@@ -81,6 +81,9 @@ export const searchParamsSchema = z.object({
   maxPrice: z.number().optional(),
   type: z.enum(["studio", "one_bedroom", "two_bedroom", "shared"]).optional(),
   verifiedOnly: z.boolean().optional(),
+  source: z.string().optional(),
+  availability: z.string().optional(),
+  sortBy: z.string().optional(),
   page: z.number().int().min(1).default(1),
   pageSize: z.number().int().min(1).max(50).default(12),
 });
@@ -123,6 +126,30 @@ export const registerSchema = z.object({
 
 export type LoginData = z.infer<typeof loginSchema>;
 export type RegisterData = z.infer<typeof registerSchema>;
+
+export const signUpFormSchema = z
+  .object({
+    name: z.string().min(2, "Name must be at least 2 characters"),
+    email: z.string().email("Invalid email address"),
+    phone: z
+      .string()
+      .min(1, "Phone number is required")
+      .regex(/^(\+234|0)[789]\d{9}$/, "Invalid Nigerian phone number"),
+    password: z
+      .string()
+      .min(8, "Password must be at least 8 characters")
+      .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
+      .regex(/[a-z]/, "Password must contain at least one lowercase letter")
+      .regex(/[0-9]/, "Password must contain at least one number"),
+    confirmPassword: z.string().min(1, "Confirm password is required"),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Passwords do not match",
+    path: ["confirmPassword"],
+  });
+
+export type SignUpFormData = z.infer<typeof signUpFormSchema>;
+
 
 export const authResponseSchema = z.object({
   user: userSchema,

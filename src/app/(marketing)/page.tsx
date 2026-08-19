@@ -216,8 +216,8 @@ export default function HomePage() {
               university, and request inspections in one place.
             </p>
             <div className="flex flex-col gap-3 sm:flex-row">
-              <Link href="/register">
-                <Button size="lg" className="bg-brand-600 text-white hover:bg-brand-700">
+              <Link href="/signup">
+                <Button size="lg" className="bg-white text-brand-900 hover:bg-brand-50">
                   Create free account
                   <ArrowRight aria-hidden="true" className="size-4" />
                 </Button>

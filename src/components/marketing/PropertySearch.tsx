@@ -31,8 +31,18 @@ const priceRanges = [
   { value: "0-200000", label: `Up to ${formatNaira(200000)}` },
   { value: "200000-400000", label: `${formatNaira(200000)} - ${formatNaira(400000)}` },
   { value: "400000-600000", label: `${formatNaira(400000)} - ${formatNaira(600000)}` },
-  { value: "600000-800000", label: `${formatNaira(600000)} - ${formatNaira(800000)}` },
+  { value: "600000-800000", label: `${formatNaira(400000)} - ${formatNaira(800000)}` },
   { value: "800000-", label: `${formatNaira(800000)}+` },
+];
+
+const sourceTypes = [
+  { value: "wale", label: "WALE Direct" },
+  { value: "landlord", label: "Direct Landlord" },
+  { value: "agent", label: "Verified Lawyer / Agent" },
+];
+
+const availabilityTypes = [
+  { value: "immediate", label: "Available immediately" },
 ];
 
 export function PropertySearch({
@@ -64,6 +74,9 @@ export function PropertySearch({
   const [verifiedOnly, setVerifiedOnly] = useState(
     initialParams.verifiedOnly ?? false,
   );
+  const [source, setSource] = useState(initialParams.source ?? "");
+  const [availability, setAvailability] = useState(initialParams.availability ?? "");
+  const [sortBy, setSortBy] = useState(initialParams.sortBy ?? "newest");
   const [page, setPage] = useState(initialParams.page ?? 1);
 
   // Build the actual query from local state
@@ -75,6 +88,10 @@ export function PropertySearch({
   if (university) queryParams.university = university;
   if (type) queryParams.type = type;
   if (verifiedOnly) queryParams.verifiedOnly = true;
+  if (source) queryParams.source = source;
+  if (availability) queryParams.availability = availability;
+  if (sortBy) queryParams.sortBy = sortBy;
+  
   if (priceRange) {
     const [min, max] = priceRange.split("-").map((s) => (s ? Number(s) : undefined));
     if (min !== undefined) queryParams.minPrice = min;
@@ -90,6 +107,9 @@ export function PropertySearch({
     if (university) params.set("university", university);
     if (type) params.set("type", type);
     if (verifiedOnly) params.set("verifiedOnly", "true");
+    if (source) params.set("source", source);
+    if (availability) params.set("availability", availability);
+    if (sortBy && sortBy !== "newest") params.set("sortBy", sortBy);
     if (priceRange) {
       const [min, max] = priceRange.split("-");
       if (min) params.set("minPrice", min);
@@ -99,7 +119,7 @@ export function PropertySearch({
 
     const newUrl = `/properties${params.toString() ? `?${params}` : ""}`;
     router.replace(newUrl, { scroll: false });
-  }, [query, university, type, verifiedOnly, priceRange, page, router]);
+  }, [query, university, type, verifiedOnly, priceRange, source, availability, sortBy, page, router]);
 
   function handleSearch(event: FormEvent) {
     event.preventDefault();
@@ -112,6 +132,9 @@ export function PropertySearch({
     setType("");
     setPriceRange("");
     setVerifiedOnly(false);
+    setSource("");
+    setAvailability("");
+    setSortBy("newest");
     setPage(1);
   }
 
@@ -120,12 +143,14 @@ export function PropertySearch({
     (university ? 1 : 0) +
     (type ? 1 : 0) +
     (priceRange ? 1 : 0) +
-    (verifiedOnly ? 1 : 0);
+    (verifiedOnly ? 1 : 0) +
+    (source ? 1 : 0) +
+    (availability ? 1 : 0);
 
   return (
     <>
       {/* Search bar + filter toggle */}
-      <Section as="div" spacing="tight" className="bg-ink-50/70">
+      <Section as="div" spacing="tight" className="bg-ink-50/70 py-6 border-b border-ink-100">
         <Container size="default">
           <form
             onSubmit={handleSearch}
@@ -146,7 +171,7 @@ export function PropertySearch({
                   id="search-query"
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Search Akoka, Agbowo, Samaru…"
+                  placeholder="Search Akoka, Agbowo, Tanke, Samaru…"
                   className="h-12 pl-10"
                 />
               </div>
@@ -155,7 +180,7 @@ export function PropertySearch({
                 type="button"
                 tone="outline"
                 size="lg"
-                className="h-12"
+                className="h-12 shrink-0"
                 onClick={() => setShowFilters(!showFilters)}
                 aria-expanded={showFilters}
                 aria-controls="filters-panel"
@@ -163,13 +188,13 @@ export function PropertySearch({
                 <SlidersHorizontal aria-hidden="true" className="size-4" />
                 Filters
                 {activeFilters > 0 && (
-                  <span className="flex size-5 items-center justify-center rounded-full bg-brand-600 text-xs font-semibold text-white">
+                  <span className="flex size-5 items-center justify-center rounded-full bg-brand-600 text-[10px] font-semibold text-white">
                     {activeFilters}
                   </span>
                 )}
               </Button>
 
-              <Button type="submit" size="lg" className="h-12 px-8">
+              <Button type="submit" size="lg" className="h-12 px-8 shrink-0">
                 Search
               </Button>
             </div>
@@ -179,35 +204,42 @@ export function PropertySearch({
 
       {/* Filters panel */}
       {showFilters && (
-        <Section as="div" id="filters-panel" spacing="tight" className="border-b border-ink-200 bg-white">
+        <Section as="div" id="filters-panel" spacing="tight" className="border-b border-ink-200 bg-white py-6">
           <Container size="default">
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+              {/* Row 1 */}
               <div>
-                <label htmlFor="filter-university" className="mb-2 block text-sm font-medium text-ink-900">
+                <label htmlFor="filter-university" className="mb-1.5 block text-sm font-semibold text-ink-950">
                   University
                 </label>
                 <Select
                   id="filter-university"
                   value={university}
-                  onChange={(event) => setUniversity(event.target.value)}
+                  onChange={(event) => {
+                    setUniversity(event.target.value);
+                    setPage(1);
+                  }}
                 >
                   <option value="">Any university</option>
                   {universities.map((uni) => (
                     <option key={uni.id} value={uni.id}>
-                      {uni.short}
+                      {uni.short} ({uni.name})
                     </option>
                   ))}
                 </Select>
               </div>
 
               <div>
-                <label htmlFor="filter-type" className="mb-2 block text-sm font-medium text-ink-900">
+                <label htmlFor="filter-type" className="mb-1.5 block text-sm font-semibold text-ink-950">
                   Apartment type
                 </label>
                 <Select
                   id="filter-type"
                   value={type}
-                  onChange={(event) => setType(event.target.value as SearchParamsType["type"] | "")}
+                  onChange={(event) => {
+                    setType(event.target.value as SearchParamsType["type"] | "");
+                    setPage(1);
+                  }}
                 >
                   <option value="">Any type</option>
                   {propertyTypes.map((pt) => (
@@ -219,13 +251,16 @@ export function PropertySearch({
               </div>
 
               <div>
-                <label htmlFor="filter-price" className="mb-2 block text-sm font-medium text-ink-900">
-                  Annual rent
+                <label htmlFor="filter-price" className="mb-1.5 block text-sm font-semibold text-ink-950">
+                  Annual rent budget
                 </label>
                 <Select
                   id="filter-price"
                   value={priceRange}
-                  onChange={(event) => setPriceRange(event.target.value)}
+                  onChange={(event) => {
+                    setPriceRange(event.target.value);
+                    setPage(1);
+                  }}
                 >
                   {priceRanges.map((range) => (
                     <option key={range.value} value={range.value}>
@@ -235,21 +270,67 @@ export function PropertySearch({
                 </Select>
               </div>
 
-              <div className="flex items-end">
-                <label htmlFor="filter-verified" className="flex items-center gap-2 text-sm font-medium text-ink-900 cursor-pointer">
+              {/* Row 2 */}
+              <div>
+                <label htmlFor="filter-source" className="mb-1.5 block text-sm font-semibold text-ink-950">
+                  Listing source
+                </label>
+                <Select
+                  id="filter-source"
+                  value={source}
+                  onChange={(event) => {
+                    setSource(event.target.value);
+                    setPage(1);
+                  }}
+                >
+                  <option value="">Any publisher</option>
+                  {sourceTypes.map((s) => (
+                    <option key={s.value} value={s.value}>
+                      {s.label}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+
+              <div>
+                <label htmlFor="filter-availability" className="mb-1.5 block text-sm font-semibold text-ink-950">
+                  Availability
+                </label>
+                <Select
+                  id="filter-availability"
+                  value={availability}
+                  onChange={(event) => {
+                    setAvailability(event.target.value);
+                    setPage(1);
+                  }}
+                >
+                  <option value="">Any availability</option>
+                  {availabilityTypes.map((av) => (
+                    <option key={av.value} value={av.value}>
+                      {av.label}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+
+              <div className="flex items-center pt-6">
+                <label htmlFor="filter-verified" className="flex items-center gap-2.5 text-sm font-semibold text-ink-900 cursor-pointer select-none">
                   <Checkbox
                     id="filter-verified"
                     checked={verifiedOnly}
-                    onChange={(event) => setVerifiedOnly(event.target.checked)}
+                    onChange={(event) => {
+                      setVerifiedOnly(event.target.checked);
+                      setPage(1);
+                    }}
                   />
-                  Verified only
+                  Verified by WALE only
                 </label>
               </div>
             </div>
 
             {activeFilters > 0 && (
-              <div className="mt-4 flex items-center justify-between border-t border-ink-100 pt-4">
-                <p className="text-sm text-ink-600">
+              <div className="mt-6 flex items-center justify-between border-t border-ink-100 pt-4">
+                <p className="text-sm font-medium text-ink-600">
                   {activeFilters} active {activeFilters === 1 ? "filter" : "filters"}
                 </p>
                 <Button
@@ -259,7 +340,7 @@ export function PropertySearch({
                   onClick={handleClearFilters}
                 >
                   <X aria-hidden="true" className="size-4" />
-                  Clear all
+                  Clear all filters
                 </Button>
               </div>
             )}
@@ -268,7 +349,7 @@ export function PropertySearch({
       )}
 
       {/* Results */}
-      <Section>
+      <Section className="py-10">
         <Container size="wide">
           {isLoading && (
             <div aria-busy="true" aria-live="polite">
@@ -315,11 +396,31 @@ export function PropertySearch({
 
           {data && data.properties.length > 0 && (
             <>
-              <div className="mb-6 flex items-center justify-between">
+              {/* Header with Showing X and Sorting */}
+              <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-ink-100 pb-4">
                 <p className="text-sm text-ink-600">
                   Showing {data.properties.length} of {data.total}{" "}
                   {data.total === 1 ? "property" : "properties"}
                 </p>
+
+                <div className="flex items-center gap-2">
+                  <label htmlFor="sort-by" className="text-sm font-semibold text-ink-700 whitespace-nowrap">
+                    Sort by:
+                  </label>
+                  <Select
+                    id="sort-by"
+                    value={sortBy}
+                    onChange={(event) => {
+                      setSortBy(event.target.value);
+                      setPage(1);
+                    }}
+                    className="w-[180px] h-9 text-xs"
+                  >
+                    <option value="newest">Newest listings</option>
+                    <option value="price_asc">Price: Low to High</option>
+                    <option value="price_desc">Price: High to Low</option>
+                  </Select>
+                </div>
               </div>
 
               <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">

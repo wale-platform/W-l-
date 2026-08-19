@@ -42,6 +42,15 @@ export default async function PropertiesPage({
   const maxPrice = first(searchParams?.maxPrice);
   if (maxPrice) initialParams.maxPrice = Number(maxPrice);
 
+  const source = first(searchParams?.source);
+  if (source) initialParams.source = source;
+
+  const availability = first(searchParams?.availability);
+  if (availability) initialParams.availability = availability;
+
+  const sortBy = first(searchParams?.sortBy);
+  if (sortBy) initialParams.sortBy = sortBy;
+
   const page = first(searchParams?.page);
   if (page) initialParams.page = Number(page);
 

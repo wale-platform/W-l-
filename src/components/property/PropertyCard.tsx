@@ -19,7 +19,7 @@ export function PropertyCard({ property }: { property: Property }) {
   const uni = universityName(property.university);
 
   return (
-    <Card interactive className="group flex flex-col overflow-hidden">
+    <Card interactive className="relative group flex flex-col overflow-hidden">
       <div className="relative aspect-[4/3] overflow-hidden bg-ink-100">
         <Image
           src={property.images[0]}
@@ -72,6 +72,15 @@ export function PropertyCard({ property }: { property: Property }) {
           <CalendarDays aria-hidden="true" className="size-3.5 shrink-0" />
           Available {formatDate(property.availableDate)}
         </p>
+
+        <div className="mt-1 flex items-center gap-1.5 text-xs font-semibold text-brand-800 bg-brand-50/70 border border-brand-100/50 px-2.5 py-0.5 rounded-full self-start">
+          <span className="size-1.5 rounded-full bg-brand-500" />
+          {property.source === "wale"
+            ? "WALE Direct"
+            : property.source === "landlord"
+            ? "Landlord Verified"
+            : "Verified Lawyer / Agent"}
+        </div>
 
         <p className="mt-auto pt-2 text-lg font-semibold text-brand-800">
           {formatRent(property.price)}
