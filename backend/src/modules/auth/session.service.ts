@@ -1,8 +1,9 @@
-import type { Session, User } from "@prisma/client";
+import type { Session } from "@prisma/client";
 
 import { prisma } from "../../lib/prisma";
 import { generateToken, hashToken } from "../../lib/crypto";
 import { SESSION_TTL_MS } from "../../lib/cookies";
+import type { UserWithRoles } from "../users/user.serializer";
 
 /**
  * Session lifecycle.
@@ -43,14 +44,18 @@ export async function createSession(
 /**
  * Resolve a raw session token to its user, or null if missing/expired.
  * Expired rows are pruned lazily on lookup.
+ *
+ * Loads the user's granted roles alongside the row: every authenticated request
+ * authorizes against the full role set, so fetching it here avoids a second
+ * query per request in `requireRole`.
  */
 export async function validateSession(
   rawToken: string,
-): Promise<{ user: User; session: Session } | null> {
+): Promise<{ user: UserWithRoles; session: Session } | null> {
   const tokenHash = hashToken(rawToken);
   const session = await prisma.session.findUnique({
     where: { tokenHash },
-    include: { user: true },
+    include: { user: { include: { roles: { select: { role: true } } } } },
   });
 
   if (!session) return null;

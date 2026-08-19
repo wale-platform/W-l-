@@ -16,13 +16,23 @@ datasource db {
 
 // ──────────────────────────────────────────────────────────────── Users ──
 
-// Primary role for coarse authorization. A user is NOT limited to one
-// relationship with the platform: ownership is expressed through the
-// Property.owner relation, so a USER can also own listings without a role
-// change. Extend this enum (e.g. AGENT) without reshaping anything else.
+// What a user is allowed to be on the platform.
+//
+// A single account is NOT limited to one relationship with Wale: the same person
+// may rent a flat, offer moving services, and later list a property. That is
+// modelled as `User.role` (the PRIMARY role, which decides the default dashboard
+// and nav) plus `UserRole` rows (every role the account additionally holds).
+// Authorization always checks the union of the two — see `userRoles()` in
+// src/modules/users/role.service.ts — so granting a role never means editing an
+// account's identity.
+//
+// TENANT was previously named USER; the migration renames the enum value in
+// place so existing rows keep their role.
 enum Role {
-  USER
+  TENANT
   LANDLORD
+  LAWYER
+  MOVER
   ADMIN
 }
 
@@ -41,7 +51,9 @@ model User {
   lastName       String     @default("")
   phone          String?
   passwordHash   String
-  role           Role       @default(USER)
+  // PRIMARY role: the one this account signed up as, used for the default
+  // landing dashboard. Additional roles live in `roles` (UserRole).
+  role           Role       @default(TENANT)
   status         UserStatus @default(ACTIVE)
   avatar         String?
   // Student-focused signup collects a university id (e.g. "unilag"); optional
@@ -56,9 +68,34 @@ model User {
   emailVerificationTokens EmailVerificationToken[]
   passwordResetTokens     PasswordResetToken[]
   properties              Property[]
+  roles                   UserRole[]
+  grantedRoles            UserRole[] @relation("RoleGrantedBy")
 
   @@index([role])
   @@index([status])
+}
+
+// Every role an account holds, including a mirror row for `User.role` so the
+// union is a single query. Composite primary key makes a duplicate grant
+// impossible without a surrogate id to maintain.
+//
+// Granting is NOT uniformly self-serve — that policy lives in role.service.ts:
+// TENANT/LANDLORD/MOVER can be self-claimed (a landlord still has to get each
+// listing through property verification, and a mover's residence claims still
+// have to be verified, so the claim alone confers no trust), while LAWYER and
+// ADMIN can only be granted by an existing ADMIN.
+model UserRole {
+  userId    String
+  role      Role
+  grantedAt DateTime @default(now())
+  // The admin who granted it; null for self-claimed roles and for signup.
+  grantedByUserId String?
+
+  user      User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  grantedBy User? @relation("RoleGrantedBy", fields: [grantedByUserId], references: [id], onDelete: SetNull)
+
+  @@id([userId, role])
+  @@index([role])
 }
 
 // ────────────────────────────────────────────────────────────── Sessions ──

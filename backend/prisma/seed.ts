@@ -386,48 +386,65 @@ async function seedUsers() {
     hashPassword(DEV_PASSWORD.landlord),
   ]);
 
-  await prisma.user.upsert({
-    where: { email: "admin@wale.test" },
-    update: {},
-    create: {
+  const accounts: {
+    email: string;
+    firstName: string;
+    lastName: string;
+    passwordHash: string;
+    role: Role;
+    university?: string;
+    /** Extra roles beyond the primary, to exercise the multi-role model. */
+    alsoRoles?: Role[];
+  }[] = [
+    {
       email: "admin@wale.test",
       firstName: "Wale",
       lastName: "Admin",
       passwordHash: adminHash,
       role: Role.ADMIN,
-      emailVerified: true,
-      emailVerifiedAt: new Date(),
     },
-  });
-
-  await prisma.user.upsert({
-    where: { email: "student@wale.test" },
-    update: {},
-    create: {
+    {
       email: "student@wale.test",
       firstName: "Ada",
       lastName: "Student",
       passwordHash: studentHash,
-      role: Role.USER,
+      role: Role.TENANT,
       university: "unilag",
-      emailVerified: true,
-      emailVerifiedAt: new Date(),
+      // Ada has also moved out of a place before, so she can leave a
+      // lived-experience review — one account, two roles.
+      alsoRoles: [Role.MOVER],
     },
-  });
-
-  await prisma.user.upsert({
-    where: { email: "landlord@wale.test" },
-    update: {},
-    create: {
+    {
       email: "landlord@wale.test",
       firstName: "Bola",
       lastName: "Landlord",
       passwordHash: landlordHash,
       role: Role.LANDLORD,
-      emailVerified: true,
-      emailVerifiedAt: new Date(),
     },
-  });
+  ];
+
+  for (const account of accounts) {
+    const { alsoRoles = [], ...data } = account;
+    const user = await prisma.user.upsert({
+      where: { email: data.email },
+      update: {},
+      create: {
+        ...data,
+        emailVerified: true,
+        emailVerifiedAt: new Date(),
+      },
+    });
+
+    // Mirror the primary role plus any extras, so the union that authorization
+    // reads is correct for seeded accounts too.
+    for (const role of [data.role, ...alsoRoles]) {
+      await prisma.userRole.upsert({
+        where: { userId_role: { userId: user.id, role } },
+        create: { userId: user.id, role },
+        update: {},
+      });
+    }
+  }
 
   console.log("  ✓ 3 development accounts (admin/student/landlord @wale.test)");
 }

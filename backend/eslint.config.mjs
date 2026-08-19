@@ -25,7 +25,9 @@ export default tseslint.config(
     },
   },
   {
-    files: ["tests/**/*.ts", "prisma/seed.ts"],
+    // Console output is the interface for tests, the seed, and CLI scripts —
+    // not a leftover debug statement.
+    files: ["tests/**/*.ts", "prisma/seed.ts", "scripts/**/*.ts"],
     rules: {
       "no-console": "off",
     },

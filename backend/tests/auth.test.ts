@@ -106,6 +106,83 @@ describe("POST /auth/register", () => {
     expect(res.body.error.code).toBe("VALIDATION_ERROR");
     expect(prismaMock.user.findUnique).not.toHaveBeenCalled();
   });
+
+  it("registers a landlord with no university (they don't have one)", async () => {
+    // Wale started student-focused, but university is nullable in the schema and
+    // requiring it here would make LANDLORD/MOVER signup impossible.
+    prismaMock.user.create.mockResolvedValue(
+      makeUser({ email: "owner@wale.test", role: "LANDLORD", university: null }),
+    );
+
+    const res = await postCsrf("/auth/register", {
+      firstName: "Bola",
+      lastName: "Owner",
+      email: "owner@wale.test",
+      phone: "08031234567",
+      password: PASSWORD,
+      confirmPassword: PASSWORD,
+      role: "LANDLORD",
+    });
+
+    expect(res.status).toBe(201);
+    expect(res.body.data.user.role).toBe("LANDLORD");
+    expect(res.body.data.user.roles).toEqual(["LANDLORD"]);
+  });
+
+  it("normalizes a Nigerian phone number to +234 form", async () => {
+    const res = await postCsrf("/auth/register", {
+      firstName: "Chidi",
+      lastName: "Mover",
+      email: "new@wale.test",
+      phone: "0803 123 4567",
+      password: PASSWORD,
+      confirmPassword: PASSWORD,
+      role: "MOVER",
+    });
+
+    expect(res.status).toBe(201);
+    expect(prismaMock.user.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ phone: "+2348031234567" }),
+      }),
+    );
+  });
+
+  it("rejects mismatched password confirmation with 422", async () => {
+    const res = await postCsrf("/auth/register", {
+      firstName: "Typo",
+      lastName: "Fingers",
+      email: "typo@wale.test",
+      password: PASSWORD,
+      confirmPassword: `${PASSWORD}x`,
+    });
+
+    expect(res.status).toBe(422);
+    expect(res.body.error.details).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ field: "confirmPassword" }),
+      ]),
+    );
+    expect(prismaMock.user.create).not.toHaveBeenCalled();
+  });
+
+  it("REFUSES to register a self-assigned ADMIN or LAWYER role", async () => {
+    // Privilege escalation at the front door. The signup enum omits both, so
+    // this never reaches the service.
+    for (const role of ["ADMIN", "LAWYER"]) {
+      const res = await postCsrf("/auth/register", {
+        firstName: "Esc",
+        lastName: "Alate",
+        email: `esc-${role}@wale.test`,
+        password: PASSWORD,
+        confirmPassword: PASSWORD,
+        role,
+      });
+
+      expect(res.status).toBe(422);
+    }
+    expect(prismaMock.user.create).not.toHaveBeenCalled();
+  });
 });
 
 describe("POST /auth/login", () => {

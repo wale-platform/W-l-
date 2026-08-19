@@ -4,16 +4,18 @@ import type {
   Property,
   PropertyImage,
   Session,
-  User,
 } from "@prisma/client";
+
+import type { UserWithRoles } from "../src/modules/users/user.serializer";
 
 /**
  * Factories for the DB rows the mocked Prisma client returns. Overrides let a
  * test express intent ("an unverified user", "a suspended account") in one line.
  */
 
-export function makeUser(overrides: Partial<User> = {}): User {
+export function makeUser(overrides: Partial<UserWithRoles> = {}): UserWithRoles {
   const now = new Date("2026-01-01T00:00:00.000Z");
+  const role = overrides.role ?? "TENANT";
   return {
     id: "usr_test_1",
     email: "ada@wale.test",
@@ -25,7 +27,7 @@ export function makeUser(overrides: Partial<User> = {}): User {
     // `makeUserWithPassword` (which hashes for real) instead of this default.
     passwordHash:
       "$argon2id$v=19$m=19456,t=2,p=1$c29tZXNhbHR2YWx1ZXg$3s7d0m3aQ0Zp3m0mVdE8oQ",
-    role: "USER",
+    role,
     status: "ACTIVE",
     avatar: null,
     university: "unilag",
@@ -33,6 +35,9 @@ export function makeUser(overrides: Partial<User> = {}): User {
     emailVerifiedAt: now,
     createdAt: now,
     updatedAt: now,
+    // Mirrors the primary role, exactly as the real rows do (see the backfill in
+    // the roles migration). Pass `roles` explicitly to model a multi-role account.
+    roles: [{ role }],
     ...overrides,
   };
 }
@@ -44,8 +49,8 @@ export function makeUser(overrides: Partial<User> = {}): User {
  */
 export async function makeUserWithPassword(
   password: string,
-  overrides: Partial<User> = {},
-): Promise<User> {
+  overrides: Partial<UserWithRoles> = {},
+): Promise<UserWithRoles> {
   const { hashPassword } = await import("../src/lib/crypto");
   const passwordHash = await hashPassword(password);
   return makeUser({ passwordHash, ...overrides });

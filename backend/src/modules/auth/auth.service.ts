@@ -1,4 +1,4 @@
-import type { User } from "@prisma/client";
+import type { Role, User } from "@prisma/client";
 
 import { corsOrigins } from "../../config/env";
 import { hashPassword, verifyPassword } from "../../lib/crypto";
@@ -9,6 +9,7 @@ import {
 import { ConflictError, UnauthorizedError } from "../../lib/errors";
 import { logger } from "../../lib/logger";
 import { prisma } from "../../lib/prisma";
+import { isSelfClaimable, mirrorPrimaryRole } from "../users/role.service";
 import { toPublicUser, type PublicUser } from "../users/user.serializer";
 import { splitName, type LoginInput, type RegisterInput } from "./auth.schemas";
 import {
@@ -67,14 +68,31 @@ export async function register(
   const { firstName, lastName } = splitName(input);
   const passwordHash = await hashPassword(input.password);
 
-  const user = await prisma.user.create({
-    data: {
-      email: input.email,
-      firstName,
-      lastName,
-      passwordHash,
-      university: input.university,
-    },
+  // Signup may only ever produce a self-claimable role. The request body is
+  // untrusted, so a client sending role:"ADMIN" must not be able to create an
+  // administrator — it falls back to TENANT instead of erroring, since the
+  // schema already restricts the field and this is defence in depth.
+  const requestedRole = input.role;
+  const role: Role =
+    requestedRole && isSelfClaimable(requestedRole) ? requestedRole : "TENANT";
+
+  const user = await prisma.$transaction(async (tx) => {
+    const created = await tx.user.create({
+      data: {
+        email: input.email,
+        firstName,
+        lastName,
+        phone: input.phone ?? null,
+        passwordHash,
+        role,
+        university: input.university,
+      },
+    });
+    // Mirror the primary role so the union is consistent immediately.
+    await mirrorPrimaryRole(tx, created.id, role);
+    // The only role a brand-new account can hold is the one just written, so
+    // attach it directly rather than paying for a re-read.
+    return { ...created, roles: [{ role }] };
   });
 
   await issueAndSendVerification(user);
@@ -85,7 +103,10 @@ export async function register(
 }
 
 export async function login(input: LoginInput, ctx: SessionContext): Promise<AuthResult> {
-  const user = await prisma.user.findUnique({ where: { email: input.email } });
+  const user = await prisma.user.findUnique({
+    where: { email: input.email },
+    include: { roles: { select: { role: true } } },
+  });
 
   if (!user) {
     // Burn comparable time, then fail with the same generic error.
@@ -117,6 +138,7 @@ export async function verifyEmail(token: string): Promise<PublicUser> {
   const user = await prisma.user.update({
     where: { id: userId },
     data: { emailVerified: true, emailVerifiedAt: new Date() },
+    include: { roles: { select: { role: true } } },
   });
   return toPublicUser(user);
 }
@@ -167,6 +189,9 @@ export async function resetPassword(token: string, newPassword: string): Promise
 }
 
 export async function getCurrentUser(userId: string): Promise<PublicUser | null> {
-  const user = await prisma.user.findUnique({ where: { id: userId } });
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { roles: { select: { role: true } } },
+  });
   return user ? toPublicUser(user) : null;
 }

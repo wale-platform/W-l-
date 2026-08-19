@@ -56,13 +56,21 @@ export async function optionalAuth(
   }
 }
 
+/**
+ * Gate a route to specific roles: 401 if unauthenticated, 403 if authenticated
+ * but not permitted.
+ *
+ * Checks the user's FULL role set, not their primary role — an account whose
+ * primary role is TENANT but which also holds LANDLORD must be able to reach
+ * landlord routes. See src/modules/users/role.service.ts.
+ */
 export function requireRole(...roles: Role[]) {
   return (req: Request, _res: Response, next: NextFunction): void => {
     if (!req.user) {
       next(new UnauthorizedError("You must be signed in to do that"));
       return;
     }
-    if (!roles.includes(req.user.role)) {
+    if (!req.user.roles.some((held) => roles.includes(held))) {
       next(new ForbiddenError());
       return;
     }

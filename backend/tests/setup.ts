@@ -35,4 +35,23 @@ export const prismaMock = prisma as unknown as DeepMockProxy<PrismaClient>;
 
 beforeEach(() => {
   mockReset(prismaMock);
+
+  // Interactive transactions must actually run their callback, otherwise any
+  // service using `prisma.$transaction` silently resolves to undefined. Passing
+  // the mock itself as the transaction client means `tx.user.create(...)` and
+  // `prisma.user.create(...)` are the same spy, so existing assertions hold.
+  // The array form (`$transaction([...])`) is also supported for completeness.
+  //
+  // The cast is unavoidable: `$transaction` is heavily overloaded, and no single
+  // signature covers both the callback and array forms.
+  const runTransaction = (arg: unknown): Promise<unknown> =>
+    typeof arg === "function"
+      ? Promise.resolve((arg as (tx: typeof prismaMock) => unknown)(prismaMock))
+      : Promise.all(arg as unknown[]);
+
+  (
+    prismaMock.$transaction as unknown as {
+      mockImplementation: (fn: typeof runTransaction) => void;
+    }
+  ).mockImplementation(runTransaction);
 });
