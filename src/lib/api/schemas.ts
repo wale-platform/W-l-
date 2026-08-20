@@ -17,15 +17,51 @@ import { z } from "zod";
  * human labels — it must not invent its own vocabulary, or every real user
  * fails to parse.
  */
-export const roleSchema = z.enum(["USER", "LANDLORD", "ADMIN"]);
+export const roleSchema = z.enum(["TENANT", "LANDLORD", "LAWYER", "MOVER", "ADMIN"]);
 
 export type Role = z.infer<typeof roleSchema>;
 
 /** Display labels for roles, kept next to the enum so they cannot drift. */
 export const roleLabels: Record<Role, string> = {
-  USER: "Tenant",
+  TENANT: "Tenant",
   LANDLORD: "Landlord",
+  LAWYER: "Lawyer",
+  MOVER: "Mover",
   ADMIN: "Administrator",
+};
+
+/**
+ * Roles a person may choose at signup. LAWYER and ADMIN are deliberately
+ * absent: they confer trust and power, so an administrator grants them. The
+ * backend rejects them independently — this list only keeps them out of the UI.
+ */
+export const signupRoleSchema = z.enum(["TENANT", "LANDLORD", "MOVER"]);
+
+export type SignupRole = z.infer<typeof signupRoleSchema>;
+
+/** What each signup role means, shown on the role picker. */
+export const signupRoleCopy: Record<SignupRole, { label: string; blurb: string }> = {
+  TENANT: {
+    label: "I'm looking for a home",
+    blurb: "Search verified listings, book inspections, and rent with confidence.",
+  },
+  LANDLORD: {
+    label: "I have property to let",
+    blurb: "List your property, get it verified, and reach serious tenants.",
+  },
+  MOVER: {
+    label: "I've lived somewhere before",
+    blurb: "Share your honest experience of places you've rented to help others.",
+  },
+};
+
+/** The default dashboard for a given primary role. */
+export const roleHomePath: Record<Role, string> = {
+  TENANT: "/tenant",
+  LANDLORD: "/landlord",
+  LAWYER: "/lawyer",
+  MOVER: "/tenant",
+  ADMIN: "/admin",
 };
 
 export const userSchema = z.object({
@@ -37,7 +73,14 @@ export const userSchema = z.object({
   firstName: z.string().optional(),
   lastName: z.string().optional(),
   phone: z.string().nullable().optional(),
+  /** Primary role — decides the default dashboard. Do NOT authorize against it. */
   role: roleSchema,
+  /**
+   * Every role the account holds, including the primary. One person can be a
+   * tenant and a mover at once, so anything role-gated reads this, not `role`.
+   * Optional for resilience against an older backend that predates it.
+   */
+  roles: z.array(roleSchema).optional(),
   university: z.string().nullable().optional(),
   avatar: z.string().url().nullable().optional(),
   emailVerified: z.boolean().optional(),
@@ -45,6 +88,16 @@ export const userSchema = z.object({
 });
 
 export type User = z.infer<typeof userSchema>;
+
+/** Every role the user holds, falling back to the primary if `roles` is absent. */
+export function heldRoles(user: User): Role[] {
+  return user.roles?.length ? user.roles : [user.role];
+}
+
+/** True if the user holds any of `allowed`. Convenience, not a security boundary. */
+export function hasAnyRole(user: User, allowed: readonly Role[]): boolean {
+  return heldRoles(user).some((role) => allowed.includes(role));
+}
 
 /* ------------------------------------------------------------ Property -- */
 
@@ -126,25 +179,83 @@ export type ContactFormData = z.infer<typeof contactFormSchema>;
 
 /* ------------------------------------------------------------ Auth -- */
 
+/**
+ * Password policy, mirroring `backend/src/modules/auth/auth.schemas.ts`.
+ * Duplicated deliberately: the client copy gives instant feedback, the server
+ * copy is the one that actually protects anything.
+ */
+const passwordPolicy = z
+  .string()
+  .min(8, "Password must be at least 8 characters")
+  .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
+  .regex(/[a-z]/, "Password must contain at least one lowercase letter")
+  .regex(/[0-9]/, "Password must contain at least one number");
+
+/**
+ * Nigerian mobile number in the formats people actually type — 08012345678,
+ * +2348012345678, 0801 234 5678. The backend normalizes to +234XXXXXXXXXX; we
+ * only validate here and let it do the normalizing, so there is one canonical
+ * implementation of the transform.
+ */
+const phoneField = z
+  .string()
+  .trim()
+  .refine((v) => /^(\+?234|0)?[789][01]\d{8}$/.test(v.replace(/[\s()-]/g, "")), {
+    message: "Enter a valid Nigerian phone number, e.g. 08012345678",
+  });
+
 export const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
-  password: z.string().min(8, "Password must be at least 8 characters"),
+  // Don't restate the policy on login — the account may predate it. Just
+  // require something, and let the server decide.
+  password: z.string().min(1, "Password is required"),
 });
 
-export const registerSchema = z.object({
-  name: z.string().min(2, "Name must be at least 2 characters"),
+export const registerSchema = z
+  .object({
+    firstName: z.string().trim().min(2, "First name must be at least 2 characters"),
+    lastName: z.string().trim().min(2, "Last name must be at least 2 characters"),
+    email: z.string().email("Invalid email address"),
+    phone: phoneField,
+    password: passwordPolicy,
+    confirmPassword: z.string().min(1, "Please confirm your password"),
+    role: signupRoleSchema,
+    // Only meaningful for students; the column is nullable and a landlord or
+    // mover has no university.
+    university: z.string().optional(),
+    acceptTerms: z.literal(true, {
+      errorMap: () => ({ message: "Please accept the terms to continue" }),
+    }),
+  })
+  .refine((d) => d.password === d.confirmPassword, {
+    message: "Passwords do not match",
+    path: ["confirmPassword"],
+  });
+
+export const forgotPasswordSchema = z.object({
   email: z.string().email("Invalid email address"),
-  password: z
-    .string()
-    .min(8, "Password must be at least 8 characters")
-    .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
-    .regex(/[a-z]/, "Password must contain at least one lowercase letter")
-    .regex(/[0-9]/, "Password must contain at least one number"),
-  university: z.string().min(1, "Please select your university"),
+});
+
+export const resetPasswordSchema = z
+  .object({
+    token: z.string().min(1, "Reset token is missing"),
+    password: passwordPolicy,
+    confirmPassword: z.string().min(1, "Please confirm your password"),
+  })
+  .refine((d) => d.password === d.confirmPassword, {
+    message: "Passwords do not match",
+    path: ["confirmPassword"],
+  });
+
+export const resendVerificationSchema = z.object({
+  email: z.string().email("Invalid email address"),
 });
 
 export type LoginData = z.infer<typeof loginSchema>;
 export type RegisterData = z.infer<typeof registerSchema>;
+export type ForgotPasswordData = z.infer<typeof forgotPasswordSchema>;
+export type ResetPasswordData = z.infer<typeof resetPasswordSchema>;
+export type ResendVerificationData = z.infer<typeof resendVerificationSchema>;
 
 /**
  * Auth is cookie-based: register/login set an httpOnly `wale_session` cookie
@@ -156,6 +267,33 @@ export const authResponseSchema = z.object({
 });
 
 export type AuthResponse = z.infer<typeof authResponseSchema>;
+
+/**
+ * Endpoints that deliberately say the same thing whether or not the account
+ * exists, so they cannot be used to enumerate users. Render the message as-is.
+ */
+export const messageResponseSchema = z.object({
+  message: z.string(),
+});
+
+export type MessageResponse = z.infer<typeof messageResponseSchema>;
+
+/** POST /auth/verify-email returns the freshly-verified user plus a message. */
+export const verifyEmailResponseSchema = z.object({
+  user: userSchema,
+  message: z.string(),
+});
+
+export type VerifyEmailResponse = z.infer<typeof verifyEmailResponseSchema>;
+
+/** GET /users/me/roles */
+export const myRolesResponseSchema = z.object({
+  primaryRole: roleSchema,
+  roles: z.array(roleSchema),
+  claimable: z.array(roleSchema).optional(),
+});
+
+export type MyRolesResponse = z.infer<typeof myRolesResponseSchema>;
 
 /* ----------------------------------------------------------- API Error -- */
 
