@@ -5,8 +5,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, X } from "lucide-react";
 import { Logo } from "@/components/brand/Logo";
-import { Button } from "@/components/ui";
 import { Container } from "./Container";
+import { MobileAuthBlock, UserMenu } from "./UserMenu";
 import { mainNav } from "@/config/site";
 import { cn } from "@/lib/utils/cn";
 
@@ -61,14 +61,7 @@ export function Navbar() {
           </nav>
 
           <div className="hidden items-center gap-2 lg:flex">
-            <Link href="/login">
-              <Button tone="ghost" size="sm">
-                Log in
-              </Button>
-            </Link>
-            <Link href="/register">
-              <Button size="sm">Create account</Button>
-            </Link>
+            <UserMenu />
           </div>
 
           <button
@@ -115,14 +108,7 @@ export function Navbar() {
               </ul>
 
               <div className="mt-4 flex flex-col gap-2 border-t border-ink-100 pt-4">
-                <Link href="/login">
-                  <Button tone="outline" block>
-                    Log in
-                  </Button>
-                </Link>
-                <Link href="/register">
-                  <Button block>Create account</Button>
-                </Link>
+                <MobileAuthBlock onNavigate={() => setOpenedOn(null)} />
               </div>
             </nav>
           </Container>
