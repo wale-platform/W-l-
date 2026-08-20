@@ -231,7 +231,7 @@ export default function StudentDashboardPage() {
 
                     {(req.status === "PENDING" || req.status === "APPROVED") && (
                       <Button
-                        size="xs"
+                        size="sm"
                         tone="outline"
                         onClick={() => handleCancelRequest(req.id)}
                         disabled={cancelMutation.isPending}
@@ -267,7 +267,7 @@ export default function StudentDashboardPage() {
               <div className="relative aspect-[16/10] w-full overflow-hidden bg-ink-100">
                 <img src={property.images[0]} alt="" className="object-cover size-full group-hover:scale-[1.02] transition-transform duration-300" />
                 <div className="absolute left-2.5 top-2.5 flex gap-1">
-                  {property.verified && <Badge tone="brand" size="xs">✓ Verified</Badge>}
+                  {property.verified && <Badge tone="brand" size="sm">✓ Verified</Badge>}
                 </div>
               </div>
               <div className="p-4 space-y-2 flex-1 flex flex-col justify-between">
