@@ -1,8 +1,14 @@
 import Link from "next/link";
 import { Container, Section, SectionHeading } from "@/components/layout/Container";
 import { Button, Card, CardBody, CardHeader, CardTitle } from "@/components/ui";
+import { requireRole } from "@/lib/api/server-auth";
 
-export default function LandlordDashboard() {
+export default async function LandlordDashboard() {
+  // Gates the render, not the data: the backend authorizes every API call
+  // independently. Must be here rather than in the layout — a layout cannot stop
+  // its page from rendering into the RSC payload. See lib/api/server-auth.ts.
+  await requireRole(["LANDLORD", "ADMIN"]);
+
   return (
     <main>
       <Section>
