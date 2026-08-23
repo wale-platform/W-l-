@@ -10,7 +10,7 @@ import { useAuth, useAuthActions } from "@/hooks/useAuth";
 import { loginSchema, roleHomePath, type LoginData } from "@/lib/api/schemas";
 import { Alert, Button, FormField, Input, PasswordInput } from "@/components/ui";
 import { AuthFooterLink, AuthHeading, safeRedirect } from "./AuthHeading";
-import { fieldErrorsFrom } from "./field-errors";
+import { fieldErrorsFrom } from "@/lib/api/field-errors";
 
 /**
  * Sign-in form.

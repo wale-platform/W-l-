@@ -27,7 +27,7 @@ import {
 } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
 import { AuthFooterLink, AuthHeading, safeRedirect } from "./AuthHeading";
-import { fieldErrorsFrom } from "./field-errors";
+import { fieldErrorsFrom } from "@/lib/api/field-errors";
 
 /**
  * Registration form.

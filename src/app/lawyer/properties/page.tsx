@@ -1,21 +1,13 @@
-import Link from "next/link";
-
-import {
-  Container,
-  Section,
-  SectionHeading,
-} from "@/components/layout/Container";
-
-import {
-  Button,
-  Card,
-  CardBody,
-  CardHeader,
-  CardTitle,
-  Badge,
-} from "@/components/ui";
+import { OwnerPropertiesView } from "@/components/property/OwnerPropertiesView";
 import { requireRole } from "@/lib/api/server-auth";
 
+/**
+ * A lawyer's own submissions.
+ *
+ * The same `GET /properties/mine` the landlord dashboard uses — a lawyer owns the
+ * records they created, and the lifecycle is identical, so the wording differs
+ * and nothing else does.
+ */
 export default async function LawyerPropertiesPage() {
   // Gates the render, not the data: the backend authorizes every API call
   // independently. Must be here rather than in the layout — a layout cannot stop
@@ -23,40 +15,19 @@ export default async function LawyerPropertiesPage() {
   await requireRole(["LAWYER", "ADMIN"]);
 
   return (
-    <main>
-      <Section>
-        <Container size="wide" className="flex flex-col gap-8">
-          <SectionHeading
-            eyebrow="Lawyer"
-            title="Manage Listings"
-            lead="Review and manage properties you have submitted on behalf of landlords."
-          />
-
-          <div className="flex justify-end">
-            <Link href="/lawyer/properties/upload">
-              <Button>Upload Property</Button>
-            </Link>
-          </div>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Submitted Properties</CardTitle>
-            </CardHeader>
-
-            <CardBody className="flex flex-col items-center gap-4 py-16 text-center">
-              <h3 className="text-lg font-semibold text-ink-900">
-                No properties submitted yet
-              </h3>
-
-              <p className="max-w-md text-sm leading-6 text-ink-500">
-                Properties you upload on behalf of landlords will appear here.
-              </p>
-
-              <Badge tone="neutral">No listings</Badge>
-            </CardBody>
-          </Card>
-        </Container>
-      </Section>
-    </main>
+    <OwnerPropertiesView
+      eyebrow="Lawyer"
+      title="Manage listings"
+      lead="Properties you've submitted on behalf of landlords, and where each one stands."
+      addHref="/lawyer/properties/upload"
+      addLabel="Submit a property"
+      editHref={(id) => `/lawyer/properties/${id}/edit`}
+      empty={{
+        title: "No properties submitted yet",
+        description:
+          "Properties you submit on behalf of landlords will appear here, from draft through to verified.",
+        action: "Submit your first property",
+      }}
+    />
   );
 }

@@ -1,5 +1,5 @@
+import { NewPropertyView } from "@/components/property/NewPropertyView";
 import { requireRole } from "@/lib/api/server-auth";
-import UploadPropertyForm from "./UploadPropertyForm";
 
 export default async function UploadPropertyPage() {
   // Gates the render, not the data: the backend authorizes every API call
@@ -8,5 +8,13 @@ export default async function UploadPropertyPage() {
   // rendering into the RSC payload. See lib/api/server-auth.ts.
   await requireRole(["LAWYER", "ADMIN"]);
 
-  return <UploadPropertyForm />;
+  return (
+    <NewPropertyView
+      eyebrow="Lawyer"
+      title="Submit a property"
+      lead="Fill in the landlord's details along with the property's. We'll save it as a draft so you can check everything before sending it for verification."
+      listHref="/lawyer/properties"
+      onBehalfOfOwner
+    />
+  );
 }

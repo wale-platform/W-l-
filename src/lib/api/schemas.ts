@@ -10,6 +10,24 @@ import { z } from "zod";
  * passing malformed data into the UI.
  */
 
+/* --------------------------------------------------- shared field rules -- */
+
+/**
+ * Nigerian mobile number in the formats people actually type — 08012345678,
+ * +2348012345678, 0801 234 5678. The backend normalizes to +234XXXXXXXXXX; we
+ * only validate here and let it do the normalizing, so there is one canonical
+ * implementation of the transform.
+ *
+ * Shared by signup and the listing contact fields, mirroring
+ * `backend/src/lib/zod-fields.ts` — a number is a number wherever it is typed.
+ */
+const phoneField = z
+  .string()
+  .trim()
+  .refine((v) => /^(\+?234|0)?[789][01]\d{8}$/.test(v.replace(/[\s()-]/g, "")), {
+    message: "Enter a valid Nigerian phone number, e.g. 08012345678",
+  });
+
 /* ---------------------------------------------------------------- User -- */
 
 /**
@@ -147,6 +165,265 @@ export const propertyListResponseSchema = z.object({
 
 export type PropertyListResponse = z.infer<typeof propertyListResponseSchema>;
 
+/* --------------------------------------------- Property, as its owner sees it -- */
+
+/**
+ * The listing lifecycle (Prisma `PropertyStatus`).
+ *
+ * Only the owner and admins ever see this. The public catalogue exposes
+ * `verified: boolean` instead, because "this listing is in review" is the
+ * owner's business, not a shopper's.
+ */
+export const propertyStatusSchema = z.enum([
+  "DRAFT",
+  "PENDING_VERIFICATION",
+  "VERIFIED",
+  "REJECTED",
+  "SUSPENDED",
+]);
+
+export type PropertyStatus = z.infer<typeof propertyStatusSchema>;
+
+/**
+ * How each state reads to the landlord, kept next to the enum so the label, the
+ * colour, and the explanation cannot drift apart.
+ *
+ * The hints describe what the backend actually does: PENDING_VERIFICATION is
+ * publicly listable (see `PUBLICLY_LISTABLE` in property.service.ts), so a
+ * listing in review is already reaching students — saying otherwise would be a
+ * lie the UI tells on the server's behalf.
+ */
+export const propertyStatusCopy: Record<
+  PropertyStatus,
+  { label: string; tone: "neutral" | "warning" | "success" | "danger"; hint: string }
+> = {
+  DRAFT: {
+    label: "Draft",
+    tone: "neutral",
+    hint: "Only you can see this. Send it for review when the details are complete.",
+  },
+  PENDING_VERIFICATION: {
+    label: "In review",
+    tone: "warning",
+    hint: "Students can see it while our team checks the details, but it carries no verified badge yet.",
+  },
+  VERIFIED: {
+    label: "Verified",
+    tone: "success",
+    hint: "Live, and showing the verified badge to students.",
+  },
+  REJECTED: {
+    label: "Needs changes",
+    tone: "danger",
+    hint: "Something didn't check out. Update the details and send it back for review.",
+  },
+  SUSPENDED: {
+    label: "Suspended",
+    tone: "danger",
+    hint: "Taken down by our team. Get in touch with support to sort it out.",
+  },
+};
+
+/**
+ * `GET /properties/mine` — the public payload plus what only an owner sees.
+ *
+ * An owner has to be able to tell "still a draft" from "waiting on review" from
+ * "rejected"; `verified: false` collapses all three into one. `neighborhood` is
+ * here rather than on the public schema because the public payload has no field
+ * for it, and the edit form has to show what was saved.
+ */
+export const ownerPropertySchema = propertySchema.extend({
+  status: propertyStatusSchema,
+  neighborhood: z.string().optional(),
+});
+
+export type OwnerProperty = z.infer<typeof ownerPropertySchema>;
+
+export const ownerPropertyListResponseSchema = z.object({
+  properties: z.array(ownerPropertySchema),
+  total: z.number().int(),
+  page: z.number().int(),
+  pageSize: z.number().int(),
+  totalPages: z.number().int(),
+});
+
+export type OwnerPropertyListResponse = z.infer<typeof ownerPropertyListResponseSchema>;
+
+export const myPropertiesParamsSchema = z.object({
+  status: propertyStatusSchema.optional(),
+  page: z.number().int().min(1).default(1),
+  pageSize: z.number().int().min(1).max(50).default(12),
+});
+
+export type MyPropertiesParams = z.infer<typeof myPropertiesParamsSchema>;
+
+/* ------------------------------------------ Property, as its owner writes it -- */
+
+/**
+ * The listing form, mirroring `propertyWritableFields` in
+ * `backend/src/modules/properties/property.schemas.ts`.
+ *
+ * Duplicated deliberately, exactly like the password policy below: this copy
+ * gives instant feedback while someone types, the server copy is the one that
+ * actually protects anything. The bounds are kept identical so the form never
+ * accepts something the server is going to reject.
+ *
+ * Every field's INPUT is a string, because that is what an `<input>` hands you;
+ * the OUTPUT is the JSON the API wants. So the form is typed on
+ * `PropertyFormValues` (strings) and the submit handler receives
+ * `PropertyPayload` (numbers, arrays) — one schema doing the conversion, rather
+ * than a second hand-written mapper that can disagree with it.
+ *
+ * `status`, `source`, and `ownerId` are absent on purpose: they are trust
+ * signals the server derives, and sending them accomplishes nothing.
+ *
+ * `images` is absent too — photos are uploaded separately (Cloudinary signed
+ * uploads), and the backend deliberately allows a photoless DRAFT while
+ * refusing to put one into the review queue.
+ */
+
+/** An empty box means "not provided", which is not the same as an empty value. */
+function optionalField<T extends z.ZodTypeAny>(schema: T) {
+  return z
+    .string()
+    .trim()
+    .transform((v) => (v === "" ? undefined : v))
+    .pipe(schema.optional());
+}
+
+/**
+ * A whole number typed into a text box. Both "" and "12a" mean "not a number
+ * yet" and share one message — `z.coerce.number()` would report them as
+ * "expected number, received nan", which is not something to show a landlord.
+ */
+function wholeNumberField(rules: {
+  blank: string;
+  min: [number, string];
+  max: [number, string];
+}) {
+  return z
+    .string()
+    .trim()
+    .min(1, rules.blank)
+    .refine((v) => /^\d+$/.test(v), rules.blank)
+    .transform(Number)
+    .refine((n) => n >= rules.min[0], rules.min[1])
+    .refine((n) => n <= rules.max[0], rules.max[1]);
+}
+
+export const propertyFormSchema = z.object({
+  title: z
+    .string()
+    .trim()
+    .min(8, "Give the listing a title students can recognise it by")
+    .max(140, "Title is too long"),
+  description: z
+    .string()
+    .trim()
+    .min(30, "Describe the place in at least a sentence or two")
+    .max(5_000, "Description is too long"),
+  price: wholeNumberField({
+    blank: "Enter the annual rent in naira, digits only",
+    min: [10_000, "That rent looks too low — enter the annual rent, not the monthly"],
+    max: [1_000_000_000, "That rent looks too high"],
+  }),
+  type: z.enum(["studio", "one_bedroom", "two_bedroom", "shared"], {
+    errorMap: () => ({ message: "Choose the apartment type" }),
+  }),
+  bedrooms: wholeNumberField({
+    blank: "Enter the number of bedrooms",
+    min: [0, "Bedrooms cannot be negative"],
+    max: [20, "That is more bedrooms than we can list"],
+  }),
+  bathrooms: wholeNumberField({
+    blank: "Enter the number of bathrooms",
+    min: [1, "A place needs at least one bathroom"],
+    max: [20, "That is more bathrooms than we can list"],
+  }),
+  address: z.string().trim().min(5, "Enter the street address").max(300, "Address is too long"),
+  city: z.string().trim().min(2, "Enter the city").max(120, "City is too long"),
+  state: z.string().trim().min(2, "Enter the state").max(120, "State is too long"),
+  neighborhood: optionalField(
+    z.string().min(2, "Enter a real area name").max(120, "Area name is too long"),
+  ),
+  university: optionalField(z.string().min(1).max(120)),
+  // `<input type="date">` already guarantees a real calendar date, but the value
+  // can also be typed by hand, and "2026-02-31" parses to March 3rd rather than
+  // failing. The round-trip is the check.
+  availableDate: z
+    .string()
+    .trim()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Choose the date the place becomes available")
+    .refine((v) => new Date(`${v}T00:00:00.000Z`).toISOString().startsWith(v), {
+      message: "That date does not exist",
+    }),
+  amenities: z
+    .string()
+    .transform((v) =>
+      v
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean),
+    )
+    .refine((list) => list.length <= 30, "Keep it to 30 amenities or fewer")
+    .refine(
+      (list) => list.every((item) => item.length <= 60),
+      "Each amenity should be a short phrase, not a paragraph",
+    ),
+  // The contact published ON the listing. Left blank, the server falls back to
+  // the creating account's own name and phone — which is what a landlord
+  // listing their own place wants. A lawyer acting for a landlord fills these
+  // in, so students reach the landlord and not the lawyer.
+  contactName: optionalField(
+    z.string().min(2, "Enter the full name").max(120, "Name is too long"),
+  ),
+  contactPhone: optionalField(phoneField),
+  contactEmail: optionalField(z.string().email("Invalid email address")),
+});
+
+/** What the inputs hold — every field a string. */
+export type PropertyFormValues = z.input<typeof propertyFormSchema>;
+
+/** What the API receives once the schema has parsed it. */
+export type PropertyPayload = z.output<typeof propertyFormSchema>;
+
+/**
+ * Turn a saved listing back into form values.
+ *
+ * The inverse of what the schema does on submit — numbers become strings,
+ * amenities become one comma-separated line — so an edit starts from exactly
+ * what is stored. The contact fields come from `landlord`, which is where the
+ * server publishes them; they are already concrete values by then (the server
+ * resolves the profile fallback at create time), so round-tripping them changes
+ * nothing.
+ *
+ * Lives here rather than in the form component because it is pure data and the
+ * round trip is a contract claim: `propertyFormSchema.parse(propertyFormValuesFrom(p))`
+ * must succeed for anything the API returns, or the edit form would open with
+ * errors on fields nobody touched. `scripts/verify-property-contract.mts` asserts
+ * exactly that against a real response.
+ */
+export function propertyFormValuesFrom(property: OwnerProperty): PropertyFormValues {
+  return {
+    title: property.title,
+    description: property.description,
+    price: String(property.price),
+    type: property.type,
+    bedrooms: String(property.bedrooms),
+    bathrooms: String(property.bathrooms),
+    address: property.address,
+    city: property.city,
+    state: property.state,
+    neighborhood: property.neighborhood ?? "",
+    university: property.university ?? "",
+    availableDate: property.availableDate,
+    amenities: property.amenities.join(", "),
+    contactName: property.landlord.name,
+    contactPhone: property.landlord.phone,
+    contactEmail: property.landlord.email ?? "",
+  };
+}
+
 /* ---------------------------------------------------------- Search/Filter -- */
 
 export const searchParamsSchema = z.object({
@@ -190,19 +467,6 @@ const passwordPolicy = z
   .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
   .regex(/[a-z]/, "Password must contain at least one lowercase letter")
   .regex(/[0-9]/, "Password must contain at least one number");
-
-/**
- * Nigerian mobile number in the formats people actually type — 08012345678,
- * +2348012345678, 0801 234 5678. The backend normalizes to +234XXXXXXXXXX; we
- * only validate here and let it do the normalizing, so there is one canonical
- * implementation of the transform.
- */
-const phoneField = z
-  .string()
-  .trim()
-  .refine((v) => /^(\+?234|0)?[789][01]\d{8}$/.test(v.replace(/[\s()-]/g, "")), {
-    message: "Enter a valid Nigerian phone number, e.g. 08012345678",
-  });
 
 export const loginSchema = z.object({
   email: z.string().email("Invalid email address"),

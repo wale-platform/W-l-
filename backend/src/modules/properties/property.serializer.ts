@@ -84,16 +84,25 @@ export function toSerializedProperty(p: PropertyWithImages): SerializedProperty 
 /**
  * What a listing looks like to the person who owns it (and to an admin).
  *
- * The only addition is `status`. The public payload deliberately reduces the
- * lifecycle to a `verified` boolean, but an owner staring at their own dashboard
- * has to be able to tell "still a draft" from "waiting on review" from
- * "rejected" — collapsing those three into `verified: false` would leave them
- * with no idea why the listing isn't live.
+ * `status`, because the public payload deliberately reduces the lifecycle to a
+ * `verified` boolean, but an owner staring at their own dashboard has to be able
+ * to tell "still a draft" from "waiting on review" from "rejected" — collapsing
+ * those three into `verified: false` would leave them with no idea why the
+ * listing isn't live.
+ *
+ * `neighborhood`, because it is writable and the public payload has no field for
+ * it. Without it the edit form could not show what was saved, and an area the
+ * owner typed once would be invisible to them forever.
  */
 export type OwnerProperty = SerializedProperty & {
   status: Property["status"];
+  neighborhood?: string;
 };
 
 export function toOwnerProperty(p: PropertyWithImages): OwnerProperty {
-  return { ...toSerializedProperty(p), status: p.status };
+  return {
+    ...toSerializedProperty(p),
+    status: p.status,
+    ...(p.neighborhood ? { neighborhood: p.neighborhood } : {}),
+  };
 }

@@ -25,7 +25,7 @@ import {
   myRolesResponseSchema,
   userSchema,
 } from "../src/lib/api/schemas";
-import { fieldErrorsFrom, statusOf } from "../src/components/auth/field-errors";
+import { fieldErrorsFrom, statusOf } from "../src/lib/api/field-errors";
 
 const BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000/api/v1";
 

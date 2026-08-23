@@ -379,7 +379,10 @@ export async function submitForVerification(actor: Actor, id: string): Promise<O
   }
 
   if (existing._count.images === 0) {
-    throw new ValidationError("Validation failed", [
+    // One rule, one reason — so the message says the reason. "Validation failed"
+    // is the right umbrella for a body with several problems in it; here it would
+    // just be a category label where the owner needs an instruction.
+    throw new ValidationError("Add at least one photo before submitting for review", [
       { field: "images", message: "Add at least one photo before submitting for review" },
     ]);
   }

@@ -10,7 +10,7 @@ import { authApi } from "@/lib/api/auth";
 import { resetPasswordSchema, type ResetPasswordData } from "@/lib/api/schemas";
 import { Alert, Button, FormField, PasswordInput } from "@/components/ui";
 import { AuthFooterLink, AuthHeading } from "./AuthHeading";
-import { fieldErrorsFrom } from "./field-errors";
+import { fieldErrorsFrom } from "@/lib/api/field-errors";
 
 /**
  * Set a new password from an emailed token.
