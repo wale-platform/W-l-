@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { nigerianPhone } from "../../lib/zod-fields";
+
 /**
  * Auth request schemas.
  *
@@ -19,22 +21,11 @@ const passwordPolicy = z
 const emailField = z.string().email("Invalid email address").toLowerCase().trim();
 
 /**
- * Nigerian mobile number, accepted in the formats people actually type:
- * 08012345678, 8012345678, +2348012345678, 0801 234 5678.
- * Normalized to +234XXXXXXXXXX so stored numbers are directly comparable and
- * usable by SMS/WhatsApp providers later.
+ * Nigerian mobile number. Shared with the property contact fields via
+ * `lib/zod-fields` so a number stored at signup and a number stored on a
+ * listing normalize to the same spelling.
  */
-const phoneField = z
-  .string()
-  .trim()
-  .transform((v) => v.replace(/[\s()-]/g, ""))
-  .refine((v) => /^(\+?234|0)?[789][01]\d{8}$/.test(v), {
-    message: "Enter a valid Nigerian phone number, e.g. 08012345678",
-  })
-  .transform((v) => {
-    const digits = v.replace(/^\+?234/, "").replace(/^0/, "");
-    return `+234${digits}`;
-  });
+const phoneField = nigerianPhone;
 
 /**
  * Roles a person may pick when signing up. Deliberately EXCLUDES LAWYER and

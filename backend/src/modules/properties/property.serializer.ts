@@ -80,3 +80,20 @@ export function toSerializedProperty(p: PropertyWithImages): SerializedProperty 
 
   return result;
 }
+
+/**
+ * What a listing looks like to the person who owns it (and to an admin).
+ *
+ * The only addition is `status`. The public payload deliberately reduces the
+ * lifecycle to a `verified` boolean, but an owner staring at their own dashboard
+ * has to be able to tell "still a draft" from "waiting on review" from
+ * "rejected" — collapsing those three into `verified: false` would leave them
+ * with no idea why the listing isn't live.
+ */
+export type OwnerProperty = SerializedProperty & {
+  status: Property["status"];
+};
+
+export function toOwnerProperty(p: PropertyWithImages): OwnerProperty {
+  return { ...toSerializedProperty(p), status: p.status };
+}
