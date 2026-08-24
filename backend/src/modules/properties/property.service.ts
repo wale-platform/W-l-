@@ -3,6 +3,7 @@ import { Prisma, PropertySource, PropertyStatus, type Role } from "@prisma/clien
 import { ConflictError, NotFoundError, ValidationError } from "../../lib/errors";
 import { prisma } from "../../lib/prisma";
 import { fullName } from "../users/user.serializer";
+import { deriveAmenityTags } from "./amenity-tags";
 import {
   toOwnerProperty,
   toSerializedProperty,
@@ -97,6 +98,21 @@ function buildWhere(q: ListPropertiesQuery): Prisma.PropertyWhereInput {
   if (q.university) where.university = q.university;
   if (q.type) where.type = q.type;
 
+  // City and state are stored as the landlord typed them ("Yaba", "yaba"), so
+  // they are matched case-insensitively rather than by equality. `equals` with
+  // `mode` is still an exact match — a filter for "Lagos" must not pull in
+  // "Lagos Island" — it just does not care about capitalisation.
+  if (q.city) where.city = { equals: q.city, mode: "insensitive" };
+  if (q.state) where.state = { equals: q.state, mode: "insensitive" };
+
+  if (q.minBedrooms !== undefined) where.bedrooms = { gte: q.minBedrooms };
+  if (q.minBathrooms !== undefined) where.bathrooms = { gte: q.minBathrooms };
+
+  // `hasEvery`: every tag asked for must be present. AND, not OR — someone who
+  // ticks "water" and "backup power" is stating two requirements, not offering
+  // two alternatives.
+  if (q.amenities?.length) where.amenityTags = { hasEvery: q.amenities };
+
   if (q.minPrice !== undefined || q.maxPrice !== undefined) {
     where.price = {
       ...(q.minPrice !== undefined ? { gte: q.minPrice } : {}),
@@ -112,10 +128,31 @@ function buildWhere(q: ListPropertiesQuery): Prisma.PropertyWhereInput {
       { address: contains },
       { city: contains },
       { state: contains },
+      { neighborhood: contains },
     ];
   }
 
   return where;
+}
+
+/**
+ * Ordering for the public catalogue.
+ *
+ * Every option ends in `id: "desc"`. Price and creation time are both
+ * non-unique, and an ordering with ties is not a stable ordering: rows that
+ * compare equal may come back in a different arrangement for each page, which
+ * means a listing can appear on two pages or on none. The id tiebreak makes the
+ * order total, so `skip`/`take` walks the result set exactly once.
+ */
+function orderFor(sort: ListPropertiesQuery["sort"]): Prisma.PropertyOrderByWithRelationInput[] {
+  switch (sort) {
+    case "price_asc":
+      return [{ price: "asc" }, { id: "desc" }];
+    case "price_desc":
+      return [{ price: "desc" }, { id: "desc" }];
+    case "newest":
+      return [{ createdAt: "desc" }, { id: "desc" }];
+  }
 }
 
 function paginate(total: number, page: number, pageSize: number) {
@@ -132,7 +169,7 @@ export async function listProperties(q: ListPropertiesQuery): Promise<PropertyLi
     prisma.property.findMany({
       where,
       include: { images: true },
-      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      orderBy: orderFor(q.sort),
       skip,
       take: q.pageSize,
     }),
@@ -273,6 +310,7 @@ export async function createProperty(
       city: input.city,
       state: input.state,
       amenities: input.amenities,
+      amenityTags: deriveAmenityTags(input.amenities),
       availableDate: input.availableDate,
       ...(input.neighborhood !== undefined ? { neighborhood: input.neighborhood } : {}),
       ...(input.university !== undefined ? { university: input.university } : {}),
@@ -314,6 +352,14 @@ export async function updateProperty(
 
   const { images, ...fields } = input;
   const data: Prisma.PropertyUpdateInput = { ...fields };
+
+  // Tags are derived, never sent: they exist so the amenity filter can match, so
+  // they have to be recomputed whenever the words they came from change.
+  // Otherwise an edit that removes "Prepaid meter" would leave the listing still
+  // answering a prepaid-meter search.
+  if (fields.amenities !== undefined) {
+    data.amenityTags = deriveAmenityTags(fields.amenities);
+  }
 
   if (existing.status === PropertyStatus.VERIFIED) {
     data.status = PropertyStatus.PENDING_VERIFICATION;

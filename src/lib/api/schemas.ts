@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { universities, type UniversityId } from "@/config/site";
+
 /**
  * Zod schemas are the single source of truth for data shapes.
  *
@@ -27,6 +29,24 @@ const phoneField = z
   .refine((v) => /^(\+?234|0)?[789][01]\d{8}$/.test(v.replace(/[\s()-]/g, "")), {
     message: "Enter a valid Nigerian phone number, e.g. 08012345678",
   });
+
+/**
+ * A university WALE covers, identified by the id in `config/site.ts` — never a
+ * display name.
+ *
+ * The column is matched by exact equality, so a listing stored as "University
+ * of Lagos" can never be found by the filter that sends `unilag`. Making this a
+ * closed set means the landlord form can only offer values the search can match,
+ * and the backend rejects anything else (`backend/src/lib/universities.ts`).
+ * The two lists are asserted to line up by `scripts/verify-property-contract.mts`.
+ *
+ * Derived from the config so adding a university stays a one-line change.
+ */
+const universityIds = universities.map((u) => u.id) as [UniversityId, ...UniversityId[]];
+
+export const universityIdSchema = z.enum(universityIds, {
+  errorMap: () => ({ message: "Choose one of the universities WALE covers" }),
+});
 
 /* ---------------------------------------------------------------- User -- */
 
@@ -119,12 +139,23 @@ export function hasAnyRole(user: User, allowed: readonly Role[]): boolean {
 
 /* ------------------------------------------------------------ Property -- */
 
+/**
+ * Apartment types, as the Prisma `PropertyType` enum spells them. One list,
+ * reused by the response schema, the listing form, and the search filter — a
+ * fourth copy is a fourth chance to offer a value the API rejects.
+ */
+export const PROPERTY_TYPES = ["studio", "one_bedroom", "two_bedroom", "shared"] as const;
+
+export const propertyTypeSchema = z.enum(PROPERTY_TYPES);
+
+export type PropertyType = z.infer<typeof propertyTypeSchema>;
+
 export const propertySchema = z.object({
   id: z.string(),
   title: z.string(),
   description: z.string(),
   price: z.number(),
-  type: z.enum(["studio", "one_bedroom", "two_bedroom", "shared"]),
+  type: propertyTypeSchema,
   bedrooms: z.number().int().min(0),
   bathrooms: z.number().int().min(1),
   address: z.string(),
@@ -327,7 +358,7 @@ export const propertyFormSchema = z.object({
     min: [10_000, "That rent looks too low — enter the annual rent, not the monthly"],
     max: [1_000_000_000, "That rent looks too high"],
   }),
-  type: z.enum(["studio", "one_bedroom", "two_bedroom", "shared"], {
+  type: z.enum(PROPERTY_TYPES, {
     errorMap: () => ({ message: "Choose the apartment type" }),
   }),
   bedrooms: wholeNumberField({
@@ -346,7 +377,7 @@ export const propertyFormSchema = z.object({
   neighborhood: optionalField(
     z.string().min(2, "Enter a real area name").max(120, "Area name is too long"),
   ),
-  university: optionalField(z.string().min(1).max(120)),
+  university: optionalField(universityIdSchema),
   // `<input type="date">` already guarantees a real calendar date, but the value
   // can also be typed by hand, and "2026-02-31" parses to March 3rd rather than
   // failing. The round-trip is the check.
@@ -426,18 +457,93 @@ export function propertyFormValuesFrom(property: OwnerProperty): PropertyFormVal
 
 /* ---------------------------------------------------------- Search/Filter -- */
 
+/**
+ * How results are ordered. Mirrors the backend's `propertySortSchema`.
+ *
+ * A closed set, so the client cannot ask to order by an arbitrary column, and
+ * the labels live next to the values so the `<Select>` cannot offer an option
+ * the API would reject.
+ */
+export const propertySortSchema = z.enum(["newest", "price_asc", "price_desc"]);
+
+export type PropertySort = z.infer<typeof propertySortSchema>;
+
+export const propertySortOptions: { value: PropertySort; label: string }[] = [
+  { value: "newest", label: "Newest first" },
+  { value: "price_asc", label: "Cheapest first" },
+  { value: "price_desc", label: "Most expensive first" },
+];
+
+/**
+ * Searchable amenity tags. Mirrors `AMENITY_TAGS` in the backend's
+ * `src/modules/properties/amenity-tags.ts`, which is the source of truth: the
+ * server derives these from the landlord's own wording and rejects an id it does
+ * not know, so an option added here alone would 422 rather than silently return
+ * everything.
+ */
+export const amenityTagSchema = z.enum([
+  "water",
+  "prepaid_meter",
+  "backup_power",
+  "security",
+  "parking",
+  "furnished",
+  "internet",
+  "ensuite",
+]);
+
+export type AmenityTag = z.infer<typeof amenityTagSchema>;
+
+export const amenityTagOptions: { value: AmenityTag; label: string }[] = [
+  { value: "water", label: "Running water" },
+  { value: "prepaid_meter", label: "Prepaid meter" },
+  { value: "backup_power", label: "Backup power" },
+  { value: "security", label: "Security" },
+  { value: "parking", label: "Parking" },
+  { value: "furnished", label: "Furnished" },
+  { value: "internet", label: "Internet" },
+  { value: "ensuite", label: "En-suite bathroom" },
+];
+
+/**
+ * Everything the catalogue can be narrowed or ordered by.
+ *
+ * `amenities` is serialized as one comma-separated string rather than a repeated
+ * parameter, because the array encoding has to survive axios's serializer and
+ * Express's query parser agreeing with each other, and when they don't the filter
+ * is silently dropped. See the matching note on the backend schema.
+ */
 export const searchParamsSchema = z.object({
   query: z.string().optional(),
-  university: z.string().optional(),
+  /**
+   * A university id ("unilag"), never a display name — the column is matched by
+   * equality. Callers reading it off a URL should `safeParse` first and drop an
+   * unknown value, so a hand-edited link degrades to "any university" instead of
+   * throwing (the `<Select>` then shows the filter as not applied, which is true).
+   */
+  university: universityIdSchema.optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
+  minBedrooms: z.number().int().min(0).max(20).optional(),
+  minBathrooms: z.number().int().min(0).max(20).optional(),
+  amenities: z
+    .array(amenityTagSchema)
+    .optional()
+    .transform((tags) => (tags?.length ? tags.join(",") : undefined)),
   minPrice: z.number().optional(),
   maxPrice: z.number().optional(),
-  type: z.enum(["studio", "one_bedroom", "two_bedroom", "shared"]).optional(),
+  type: propertyTypeSchema.optional(),
   verifiedOnly: z.boolean().optional(),
+  sort: propertySortSchema.optional(),
   page: z.number().int().min(1).default(1),
   pageSize: z.number().int().min(1).max(50).default(12),
 });
 
-export type SearchParams = z.infer<typeof searchParamsSchema>;
+/** What callers pass in — `amenities` is still an array at this point. */
+export type SearchParams = z.input<typeof searchParamsSchema>;
+
+/** What goes on the wire, after `amenities` is joined. */
+export type SearchQuery = z.output<typeof searchParamsSchema>;
 
 /* ----------------------------------------------------------- Contact -- */
 

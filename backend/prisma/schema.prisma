@@ -198,6 +198,12 @@ model Property {
   university   String? // university id, e.g. "unilag"
 
   amenities     String[] @default([])
+  // Canonical, searchable amenity tags derived from `amenities` on every write
+  // (see src/modules/properties/amenity-tags.ts). `amenities` is what the
+  // landlord wrote and what the listing shows; this is what the filter matches,
+  // because equality against free text ("Estate security" vs "Security gate")
+  // would make the amenity filter return nothing.
+  amenityTags   String[] @default([])
   availableDate DateTime @db.Date
 
   // Denormalized public contact shown on the listing (frontend `landlord`).
@@ -217,6 +223,9 @@ model Property {
   @@index([type])
   @@index([price])
   @@index([createdAt])
+  // GIN, because the amenity filter asks "does this array contain all of these"
+  // (`hasEvery` -> `@>`), which a B-tree on an array cannot answer.
+  @@index([amenityTags], type: Gin)
 }
 
 model PropertyImage {

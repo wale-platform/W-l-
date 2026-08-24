@@ -1,7 +1,9 @@
 import { PropertyStatus } from "@prisma/client";
 import { z } from "zod";
 
+import { universitySchema } from "../../lib/universities";
 import { dateOnly, nigerianPhone } from "../../lib/zod-fields";
+import { amenityTagSchema } from "./amenity-tags";
 
 /**
  * Query schema for GET /properties.
@@ -27,9 +29,49 @@ export const propertyTypeSchema = z.enum([
   "shared",
 ]);
 
+/**
+ * How results are ordered.
+ *
+ * A closed set rather than a `sortBy`/`direction` pair, so a client cannot ask
+ * to order by a column that happens to exist. `newest` is the default and every
+ * option breaks ties on `id`, which keeps pagination stable — without a total
+ * order, two listings sharing a price can swap places between page 1 and page 2
+ * and one of them is then never seen.
+ */
+export const propertySortSchema = z.enum(["newest", "price_asc", "price_desc"]);
+
+export type PropertySort = z.infer<typeof propertySortSchema>;
+
+/**
+ * Amenity filter: a comma-separated list of tag ids, e.g. `water,security`.
+ *
+ * Comma-separated rather than a repeated `amenities[]` parameter because the
+ * exact array encoding depends on the HTTP client's serializer and Express's
+ * query parser agreeing, and a mismatch there fails silently — the filter is
+ * simply ignored. One string has one meaning everywhere.
+ *
+ * Unknown ids are an error rather than being dropped. Quietly ignoring a tag we
+ * do not recognise would widen the result set past what the person asked for and
+ * present it as a match.
+ */
+const amenityTagList = z.preprocess((v) => {
+  if (typeof v !== "string") return v;
+  const ids = v
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+  return ids.length > 0 ? ids : undefined;
+}, z.array(amenityTagSchema).max(20).optional());
+
 export const listPropertiesQuerySchema = z.object({
   query: optionalText,
-  university: optionalText,
+  university: z.preprocess(blankToUndefined, universitySchema.optional()),
+  city: optionalText,
+  state: optionalText,
+  // Minimums, not exact counts: "2 bedrooms" as a filter means "at least 2".
+  minBedrooms: z.coerce.number().int().min(0).max(20).optional(),
+  minBathrooms: z.coerce.number().int().min(0).max(20).optional(),
+  amenities: amenityTagList,
   minPrice: z.coerce.number().int().nonnegative().optional(),
   maxPrice: z.coerce.number().int().nonnegative().optional(),
   type: propertyTypeSchema.optional(),
@@ -37,6 +79,7 @@ export const listPropertiesQuerySchema = z.object({
     .enum(["true", "false"])
     .transform((v) => v === "true")
     .optional(),
+  sort: propertySortSchema.default("newest"),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(50).default(12),
 });
@@ -103,7 +146,10 @@ const propertyWritableFields = z.object({
   city: z.string().trim().min(2, "Enter the city").max(120),
   state: z.string().trim().min(2, "Enter the state").max(120),
   neighborhood: z.string().trim().min(2).max(120).optional(),
-  university: z.string().trim().min(1).max(120).optional(),
+  // A controlled id ("unilag"), not a display name. See lib/universities.ts:
+  // the search filter matches this column exactly, so free text here would
+  // produce a listing no university search can find.
+  university: universitySchema.optional(),
   latitude: z.coerce.number().min(-90).max(90).optional(),
   longitude: z.coerce.number().min(-180).max(180).optional(),
   amenities: z.array(z.string().trim().min(1).max(60)).max(30).default([]),

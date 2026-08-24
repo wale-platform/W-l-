@@ -32,15 +32,18 @@
  */
 
 import {
+  amenityTagOptions,
   apiErrorSchema,
   ownerPropertyListResponseSchema,
   ownerPropertySchema,
   propertyFormSchema,
   propertyFormValuesFrom,
   propertyListResponseSchema,
+  propertySortOptions,
   type PropertyFormValues,
 } from "../src/lib/api/schemas";
 import { fieldErrorsFrom, messageFrom, statusOf } from "../src/lib/api/field-errors";
+import { universities } from "../src/config/site";
 
 const BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000/api/v1";
 
@@ -211,7 +214,9 @@ const FORM_INPUT: PropertyFormValues = {
   city: "Yaba",
   state: "Lagos",
   neighborhood: "Akoka",
-  university: "University of Lagos",
+  // A university ID, not a display name — the same closed vocabulary the search
+  // filter sends. Section 9 checks the two lists really do line up.
+  university: "unilag",
   availableDate: "2026-10-01",
   amenities: "Borehole, Prepaid meter, Security",
   contactName: "Ada Okoye",
@@ -448,7 +453,236 @@ if (!propertyId) {
   }
 }
 
-// 9. Clean up after ourselves.
+// 9. The vocabularies the UI offers are the ones the API accepts.
+//
+// Every closed list on the frontend is a duplicate of one on the backend, and a
+// duplicate can drift. Drift here does not throw — it returns an empty grid, or
+// a 422 on a control the visitor cannot see, which is why it is worth a live
+// check rather than a comment saying "keep these in sync".
+{
+  for (const uni of universities) {
+    const r = await owner.call("GET", `/properties?university=${uni.id}&pageSize=50`);
+    const parsed = propertyListResponseSchema.safeParse(r.data);
+    check(
+      `?university=${uni.id} is accepted and parses`,
+      r.status === 200 && parsed.success,
+      `got ${r.status} ${JSON.stringify(r.data).slice(0, 200)}`,
+    );
+    if (parsed.success) {
+      // Vacuously true for a campus with no listings yet, which is fine — the
+      // claim is that the filter is applied, not that the catalogue is full.
+      check(
+        `every result for ${uni.short} really is tagged ${uni.id}`,
+        parsed.data.properties.every((p) => p.university === uni.id),
+        JSON.stringify(parsed.data.properties.map((p) => p.university)),
+      );
+    }
+  }
+
+  // The counterpart claim: a display name is refused rather than quietly
+  // ignored. Ignoring it would return the whole catalogue and present it as
+  // "listings near University of Lagos".
+  const byName = await owner.call(
+    "GET",
+    `/properties?university=${encodeURIComponent("University of Lagos")}`,
+  );
+  check(
+    "a university display name is refused, not silently ignored",
+    byName.status === 422,
+    `got ${byName.status}`,
+  );
+
+  for (const option of amenityTagOptions) {
+    const r = await owner.call("GET", `/properties?amenities=${option.value}`);
+    check(
+      `?amenities=${option.value} ("${option.label}") is a tag the server knows`,
+      r.status === 200,
+      `got ${r.status} ${JSON.stringify(r.data).slice(0, 200)}`,
+    );
+  }
+
+  const unknownTag = await owner.call("GET", "/properties?amenities=jacuzzi");
+  check(
+    "an amenity id the server does not publish is refused",
+    unknownTag.status === 422,
+    `got ${unknownTag.status}`,
+  );
+
+  for (const option of propertySortOptions) {
+    const r = await owner.call("GET", `/properties?sort=${option.value}`);
+    check(
+      `?sort=${option.value} ("${option.label}") is accepted`,
+      r.status === 200,
+      `got ${r.status} ${JSON.stringify(r.data).slice(0, 200)}`,
+    );
+  }
+
+  const unknownSort = await owner.call("GET", "/properties?sort=price");
+  check(
+    "an order the server does not offer is refused",
+    unknownSort.status === 422,
+    `got ${unknownSort.status}`,
+  );
+}
+
+// 10. Filters narrow, sorting orders, and paging visits every listing once.
+//
+// These read the rows that come back rather than counting them, because a
+// dropped filter and a working one can return the same count by coincidence but
+// cannot both satisfy the rows.
+{
+  const all = await owner.call("GET", "/properties?pageSize=50");
+  const baseline = propertyListResponseSchema.safeParse(all.data);
+  check("the unfiltered catalogue parses", baseline.success);
+
+  if (baseline.success) {
+    const total = baseline.data.total;
+
+    const twoBeds = await owner.call("GET", "/properties?minBedrooms=2&pageSize=50");
+    const beds = propertyListResponseSchema.safeParse(twoBeds.data);
+    check("?minBedrooms=2 is accepted and parses", twoBeds.status === 200 && beds.success);
+    if (beds.success) {
+      // Without something to check, "every result has 2+ bedrooms" is true of an
+      // empty list, so the presence of results is part of the claim.
+      check(
+        "?minBedrooms=2 returned something to check",
+        beds.data.properties.length > 0,
+        `${beds.data.total} results`,
+      );
+      check(
+        "every result has at least 2 bedrooms — a minimum, not an exact match",
+        beds.data.properties.every((p) => p.bedrooms >= 2),
+        JSON.stringify(beds.data.properties.map((p) => p.bedrooms)),
+      );
+    }
+
+    const studios = await owner.call("GET", "/properties?type=studio&pageSize=50");
+    const studio = propertyListResponseSchema.safeParse(studios.data);
+    check("?type=studio is accepted and parses", studios.status === 200 && studio.success);
+    if (studio.success) {
+      check(
+        "every result is a studio",
+        studio.data.properties.length > 0 &&
+          studio.data.properties.every((p) => p.type === "studio"),
+        JSON.stringify(studio.data.properties.map((p) => p.type)),
+      );
+    }
+
+    const verified = await owner.call("GET", "/properties?verifiedOnly=true&pageSize=50");
+    const vetted = propertyListResponseSchema.safeParse(verified.data);
+    check("?verifiedOnly=true is accepted and parses", verified.status === 200 && vetted.success);
+    if (vetted.success) {
+      check(
+        "nothing unverified survives verifiedOnly=true",
+        vetted.data.properties.every((p) => p.verified),
+        JSON.stringify(vetted.data.properties.map((p) => p.verified)),
+      );
+      check(
+        "verifiedOnly actually narrows the catalogue",
+        vetted.data.total <= total,
+        `${vetted.data.total} of ${total}`,
+      );
+    }
+
+    const priced = await owner.call(
+      "GET",
+      "/properties?minPrice=400000&maxPrice=800000&pageSize=50",
+    );
+    const band = propertyListResponseSchema.safeParse(priced.data);
+    check("a rent band is accepted and parses", priced.status === 200 && band.success);
+    if (band.success) {
+      check(
+        "every result is inside the rent band",
+        band.data.properties.length > 0 &&
+          band.data.properties.every((p) => p.price >= 400_000 && p.price <= 800_000),
+        JSON.stringify(band.data.properties.map((p) => p.price)),
+      );
+    }
+
+    // Two ticked boxes are two requirements, not two alternatives: asking for
+    // more can only ever return less. An OR would show up here as a count that
+    // grows.
+    const counts: Record<string, number> = {};
+    for (const tags of ["water", "security", "water,security"]) {
+      const r = await owner.call("GET", `/properties?amenities=${tags}&pageSize=50`);
+      const parsed = propertyListResponseSchema.safeParse(r.data);
+      counts[tags] = parsed.success ? parsed.data.total : -1;
+    }
+    check(
+      "amenity tags are ANDed, not ORed",
+      counts["water,security"] <= counts.water && counts["water,security"] <= counts.security,
+      `water=${counts.water} security=${counts.security} both=${counts["water,security"]}`,
+    );
+    check(
+      "the amenity filter narrows rather than being ignored",
+      counts.water > 0 && counts.water <= total,
+      `water=${counts.water} of ${total}`,
+    );
+
+    const cheapest = await owner.call("GET", "/properties?sort=price_asc&pageSize=50");
+    const asc = propertyListResponseSchema.safeParse(cheapest.data);
+    if (asc.success) {
+      const prices = asc.data.properties.map((p) => p.price);
+      check(
+        "sort=price_asc really is cheapest first",
+        prices.every((price, i) => i === 0 || prices[i - 1] <= price),
+        JSON.stringify(prices),
+      );
+    }
+
+    const dearest = await owner.call("GET", "/properties?sort=price_desc&pageSize=50");
+    const desc = propertyListResponseSchema.safeParse(dearest.data);
+    if (desc.success) {
+      const prices = desc.data.properties.map((p) => p.price);
+      check(
+        "sort=price_desc really is dearest first",
+        prices.every((price, i) => i === 0 || prices[i - 1] >= price),
+        JSON.stringify(prices),
+      );
+    }
+
+    const newest = await owner.call("GET", "/properties?pageSize=50");
+    const byDate = propertyListResponseSchema.safeParse(newest.data);
+    if (byDate.success) {
+      const dates = byDate.data.properties.map((p) => Date.parse(p.createdAt));
+      check(
+        "the default order is newest first",
+        dates.every((date, i) => i === 0 || dates[i - 1] >= date),
+        JSON.stringify(byDate.data.properties.map((p) => p.createdAt)),
+      );
+    }
+
+    // Paging is only meaningful if the order is total. Walk every page and the
+    // ids collected must be exactly the ids that exist: no listing seen twice,
+    // and none skipped past.
+    const pageSize = 5;
+    const seen: string[] = [];
+    let pages = 0;
+    for (let page = 1; ; page++) {
+      const r = await owner.call(
+        "GET",
+        `/properties?sort=price_asc&page=${page}&pageSize=${pageSize}`,
+      );
+      const parsed = propertyListResponseSchema.safeParse(r.data);
+      if (!parsed.success) break;
+      seen.push(...parsed.data.properties.map((p) => p.id));
+      pages = parsed.data.totalPages;
+      if (page >= parsed.data.totalPages) break;
+    }
+    check(
+      "walking every page visits each listing exactly once",
+      seen.length === total && new Set(seen).size === total,
+      `${seen.length} ids, ${new Set(seen).size} distinct, total ${total}`,
+    );
+    check(
+      "totalPages matches the page size",
+      pages === Math.max(1, Math.ceil(total / pageSize)),
+      `${pages} pages for ${total} listings at ${pageSize} per page`,
+    );
+  }
+}
+
+// 11. Clean up after ourselves.
 {
   const r = await owner.call("DELETE", `/properties/${propertyId}`);
   check("DELETE /properties/:id removes the listing", r.status === 200 || r.status === 204, `got ${r.status}`);

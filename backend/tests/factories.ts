@@ -134,6 +134,9 @@ export function makeProperty(
     longitude: 3.3898,
     university: "unilag",
     amenities: ["wifi", "water", "security"],
+    // What the service would have stored for those words, so a fixture row is a
+    // row the amenity filter could actually have returned.
+    amenityTags: ["water", "security", "internet"],
     availableDate: new Date("2026-09-01T00:00:00.000Z"),
     contactName: "Wale Housing",
     contactPhone: "+2348012345678",

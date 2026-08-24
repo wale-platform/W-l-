@@ -21,6 +21,7 @@ import {
   Textarea,
 } from "@/components/ui";
 import { fieldErrorsFrom, messageFrom } from "@/lib/api/field-errors";
+import { universities } from "@/config/site";
 import {
   propertyFormSchema,
   type PropertyFormValues,
@@ -377,11 +378,14 @@ export function PropertyForm({
               error={errors.university?.message}
             >
               {(field) => (
-                <Input
-                  {...field}
-                  {...register("university")}
-                  placeholder="University of Lagos"
-                />
+                <Select {...field} {...register("university")}>
+                  <option value="">Not near a campus we cover</option>
+                  {universities.map((uni) => (
+                    <option key={uni.id} value={uni.id}>
+                      {uni.name} ({uni.short})
+                    </option>
+                  ))}
+                </Select>
               )}
             </FormField>
           </div>

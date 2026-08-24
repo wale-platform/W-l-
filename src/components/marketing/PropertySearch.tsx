@@ -15,9 +15,28 @@ import {
   Pagination,
 } from "@/components/ui";
 import { useProperties } from "@/hooks/useProperties";
-import { universities } from "@/config/site";
+import { universities, type UniversityId } from "@/config/site";
+import { messageFrom } from "@/lib/api/field-errors";
 import { formatNaira } from "@/lib/utils/format";
-import type { SearchParams as SearchParamsType } from "@/lib/api/schemas";
+import {
+  amenityTagOptions,
+  propertySortOptions,
+  type AmenityTag,
+  type PropertySort,
+  type SearchParams as SearchParamsType,
+} from "@/lib/api/schemas";
+
+/**
+ * The public catalogue: search box, filter panel, results, pagination.
+ *
+ * Every control here maps to a parameter the API actually supports
+ * (`listPropertiesQuerySchema` on the backend). That constraint is the point —
+ * a filter the server ignores, or one whose values can never match what is
+ * stored, returns an empty grid that reads as "no listings match" when the
+ * truth is "that filter is broken". So the university and amenity controls
+ * offer ids from the shared vocabularies rather than free text, and place names
+ * are left to the search box, which the server matches with `contains`.
+ */
 
 const propertyTypes = [
   { value: "studio", label: "Self-contained" },
@@ -33,7 +52,51 @@ const priceRanges = [
   { value: "400000-600000", label: `${formatNaira(400000)} - ${formatNaira(600000)}` },
   { value: "600000-800000", label: `${formatNaira(600000)} - ${formatNaira(800000)}` },
   { value: "800000-", label: `${formatNaira(800000)}+` },
-];
+] as const;
+
+/** "2+ bedrooms" — a minimum, matching the API's `gte`. */
+const roomCounts = [1, 2, 3, 4, 5] as const;
+
+/** Everything that narrows the catalogue, in one object so a change is one update. */
+type Filters = {
+  query: string;
+  university: UniversityId | "";
+  type: NonNullable<SearchParamsType["type"]> | "";
+  /** A `priceRanges` value ("200000-400000"), split into min/max on the way out. */
+  priceRange: string;
+  minBedrooms: string;
+  minBathrooms: string;
+  amenities: AmenityTag[];
+  verifiedOnly: boolean;
+  sort: PropertySort;
+};
+
+/**
+ * Restore the rent `<Select>` from a URL only when the pair is one of the
+ * offered bands. `?minPrice=137000` is a legitimate API request but not an
+ * option in the list, and showing "Any price" beside results that are in fact
+ * filtered would be a lie about what is on screen.
+ */
+function priceRangeFrom(initial: Partial<SearchParamsType>): string {
+  const { minPrice, maxPrice } = initial;
+  if (minPrice === undefined && maxPrice === undefined) return "";
+  const candidate = `${minPrice ?? 0}-${maxPrice ?? ""}`;
+  return priceRanges.some((range) => range.value === candidate) ? candidate : "";
+}
+
+function filtersFrom(initial: Partial<SearchParamsType>): Filters {
+  return {
+    query: initial.query ?? "",
+    university: initial.university ?? "",
+    type: initial.type ?? "",
+    priceRange: priceRangeFrom(initial),
+    minBedrooms: initial.minBedrooms !== undefined ? String(initial.minBedrooms) : "",
+    minBathrooms: initial.minBathrooms !== undefined ? String(initial.minBathrooms) : "",
+    amenities: initial.amenities ?? [],
+    verifiedOnly: initial.verifiedOnly ?? false,
+    sort: initial.sort ?? "newest",
+  };
+}
 
 export function PropertySearch({
   initialParams = {},
@@ -43,55 +106,81 @@ export function PropertySearch({
   const router = useRouter();
   const [showFilters, setShowFilters] = useState(false);
 
-  // Local filter state — mirrors URL params
-  const [query, setQuery] = useState(initialParams.query ?? "");
-  const [university, setUniversity] = useState(initialParams.university ?? "");
-  const [type, setType] = useState<SearchParamsType["type"] | "">(
-    initialParams.type ?? "",
-  );
-  const [priceRange, setPriceRange] = useState(() => {
-    if (initialParams.minPrice !== undefined && initialParams.maxPrice !== undefined) {
-      return `${initialParams.minPrice}-${initialParams.maxPrice}`;
-    }
-    if (initialParams.minPrice !== undefined) {
-      return `${initialParams.minPrice}-`;
-    }
-    if (initialParams.maxPrice !== undefined) {
-      return `0-${initialParams.maxPrice}`;
-    }
-    return "";
-  });
-  const [verifiedOnly, setVerifiedOnly] = useState(
-    initialParams.verifiedOnly ?? false,
-  );
+  const [filters, setFilters] = useState<Filters>(() => filtersFrom(initialParams));
   const [page, setPage] = useState(initialParams.page ?? 1);
 
-  // Build the actual query from local state
+  /**
+   * What is typed, as distinct from what is being searched for. The term only
+   * becomes a request on submit, so a nine-character area name is one query
+   * rather than nine — the Search button and the Enter key do the work they
+   * appear to do.
+   */
+  const [queryDraft, setQueryDraft] = useState(initialParams.query ?? "");
+
+  /**
+   * Any change to what is being asked for returns to page 1. Carrying the page
+   * across a filter change lands people on page 3 of a one-page result set: an
+   * empty grid that reads as "nothing matches" when everything matching is on
+   * the page they just left.
+   */
+  function update(patch: Partial<Filters>) {
+    setFilters((prev) => ({ ...prev, ...patch }));
+    setPage(1);
+  }
+
+  /**
+   * Ticked tags are kept in vocabulary order rather than click order, so
+   * ticking water-then-security and security-then-water produce the same query
+   * — one cache entry and one request instead of two identical ones.
+   */
+  function toggleAmenity(tag: AmenityTag, checked: boolean) {
+    const next = new Set(filters.amenities);
+    if (checked) next.add(tag);
+    else next.delete(tag);
+    update({
+      amenities: amenityTagOptions
+        .map((option) => option.value)
+        .filter((value) => next.has(value)),
+    });
+  }
+
+  // What the API is asked for. Only keys with a value are set: an explicit
+  // `undefined` would still become part of the query key and split the cache.
   const queryParams: Partial<SearchParamsType> = {
     page,
     pageSize: 12,
+    sort: filters.sort,
   };
-  if (query.trim()) queryParams.query = query.trim();
-  if (university) queryParams.university = university;
-  if (type) queryParams.type = type;
-  if (verifiedOnly) queryParams.verifiedOnly = true;
-  if (priceRange) {
-    const [min, max] = priceRange.split("-").map((s) => (s ? Number(s) : undefined));
+  if (filters.query) queryParams.query = filters.query;
+  if (filters.university) queryParams.university = filters.university;
+  if (filters.type) queryParams.type = filters.type;
+  if (filters.minBedrooms) queryParams.minBedrooms = Number(filters.minBedrooms);
+  if (filters.minBathrooms) queryParams.minBathrooms = Number(filters.minBathrooms);
+  if (filters.amenities.length) queryParams.amenities = filters.amenities;
+  if (filters.verifiedOnly) queryParams.verifiedOnly = true;
+  if (filters.priceRange) {
+    const [min, max] = filters.priceRange.split("-").map((s) => (s ? Number(s) : undefined));
     if (min !== undefined) queryParams.minPrice = min;
     if (max !== undefined) queryParams.maxPrice = max;
   }
 
   const { data, isLoading, isError, error } = useProperties(queryParams);
 
-  // Sync state back to URL when filters change
+  // Mirror the state into the URL so a filtered view can be shared, bookmarked,
+  // and reloaded. Amenities use the same comma encoding as the wire, so the
+  // page's parser and the API agree on what `amenities=water,security` means.
   useEffect(() => {
     const params = new URLSearchParams();
-    if (query.trim()) params.set("query", query.trim());
-    if (university) params.set("university", university);
-    if (type) params.set("type", type);
-    if (verifiedOnly) params.set("verifiedOnly", "true");
-    if (priceRange) {
-      const [min, max] = priceRange.split("-");
+    if (filters.query) params.set("query", filters.query);
+    if (filters.university) params.set("university", filters.university);
+    if (filters.type) params.set("type", filters.type);
+    if (filters.minBedrooms) params.set("minBedrooms", filters.minBedrooms);
+    if (filters.minBathrooms) params.set("minBathrooms", filters.minBathrooms);
+    if (filters.amenities.length) params.set("amenities", filters.amenities.join(","));
+    if (filters.verifiedOnly) params.set("verifiedOnly", "true");
+    if (filters.sort !== "newest") params.set("sort", filters.sort);
+    if (filters.priceRange) {
+      const [min, max] = filters.priceRange.split("-");
       if (min) params.set("minPrice", min);
       if (max) params.set("maxPrice", max);
     }
@@ -99,28 +188,40 @@ export function PropertySearch({
 
     const newUrl = `/properties${params.toString() ? `?${params}` : ""}`;
     router.replace(newUrl, { scroll: false });
-  }, [query, university, type, verifiedOnly, priceRange, page, router]);
+  }, [filters, page, router]);
 
   function handleSearch(event: FormEvent) {
     event.preventDefault();
-    setPage(1); // Reset to first page on new search
+    update({ query: queryDraft.trim() });
   }
 
   function handleClearFilters() {
-    setQuery("");
-    setUniversity("");
-    setType("");
-    setPriceRange("");
-    setVerifiedOnly(false);
-    setPage(1);
+    setQueryDraft("");
+    // Ordering is not a filter — it does not hide anything — so clearing the
+    // filters leaves the chosen sort alone.
+    update({
+      query: "",
+      university: "",
+      type: "",
+      priceRange: "",
+      minBedrooms: "",
+      minBathrooms: "",
+      amenities: [],
+      verifiedOnly: false,
+    });
   }
 
+  // Each ticked amenity counts separately, because each one is a separate
+  // requirement the results have to meet.
   const activeFilters =
-    (query.trim() ? 1 : 0) +
-    (university ? 1 : 0) +
-    (type ? 1 : 0) +
-    (priceRange ? 1 : 0) +
-    (verifiedOnly ? 1 : 0);
+    (filters.query ? 1 : 0) +
+    (filters.university ? 1 : 0) +
+    (filters.type ? 1 : 0) +
+    (filters.priceRange ? 1 : 0) +
+    (filters.minBedrooms ? 1 : 0) +
+    (filters.minBathrooms ? 1 : 0) +
+    filters.amenities.length +
+    (filters.verifiedOnly ? 1 : 0);
 
   return (
     <>
@@ -144,8 +245,8 @@ export function PropertySearch({
                 />
                 <Input
                   id="search-query"
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
+                  value={queryDraft}
+                  onChange={(event) => setQueryDraft(event.target.value)}
                   placeholder="Search Akoka, Agbowo, Samaru…"
                   className="h-12 pl-10"
                 />
@@ -179,17 +280,27 @@ export function PropertySearch({
 
       {/* Filters panel */}
       {showFilters && (
-        <Section as="div" id="filters-panel" spacing="tight" className="border-b border-ink-200 bg-white">
+        <Section
+          as="div"
+          id="filters-panel"
+          spacing="tight"
+          className="border-b border-ink-200 bg-white"
+        >
           <Container size="default">
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <div>
-                <label htmlFor="filter-university" className="mb-2 block text-sm font-medium text-ink-900">
+                <label
+                  htmlFor="filter-university"
+                  className="mb-2 block text-sm font-medium text-ink-900"
+                >
                   University
                 </label>
                 <Select
                   id="filter-university"
-                  value={university}
-                  onChange={(event) => setUniversity(event.target.value)}
+                  value={filters.university}
+                  onChange={(event) =>
+                    update({ university: event.target.value as UniversityId | "" })
+                  }
                 >
                   <option value="">Any university</option>
                   {universities.map((uni) => (
@@ -201,13 +312,18 @@ export function PropertySearch({
               </div>
 
               <div>
-                <label htmlFor="filter-type" className="mb-2 block text-sm font-medium text-ink-900">
+                <label
+                  htmlFor="filter-type"
+                  className="mb-2 block text-sm font-medium text-ink-900"
+                >
                   Apartment type
                 </label>
                 <Select
                   id="filter-type"
-                  value={type}
-                  onChange={(event) => setType(event.target.value as SearchParamsType["type"] | "")}
+                  value={filters.type}
+                  onChange={(event) =>
+                    update({ type: event.target.value as Filters["type"] })
+                  }
                 >
                   <option value="">Any type</option>
                   {propertyTypes.map((pt) => (
@@ -219,13 +335,16 @@ export function PropertySearch({
               </div>
 
               <div>
-                <label htmlFor="filter-price" className="mb-2 block text-sm font-medium text-ink-900">
+                <label
+                  htmlFor="filter-price"
+                  className="mb-2 block text-sm font-medium text-ink-900"
+                >
                   Annual rent
                 </label>
                 <Select
                   id="filter-price"
-                  value={priceRange}
-                  onChange={(event) => setPriceRange(event.target.value)}
+                  value={filters.priceRange}
+                  onChange={(event) => update({ priceRange: event.target.value })}
                 >
                   {priceRanges.map((range) => (
                     <option key={range.value} value={range.value}>
@@ -235,12 +354,85 @@ export function PropertySearch({
                 </Select>
               </div>
 
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label
+                    htmlFor="filter-bedrooms"
+                    className="mb-2 block text-sm font-medium text-ink-900"
+                  >
+                    Bedrooms
+                  </label>
+                  <Select
+                    id="filter-bedrooms"
+                    value={filters.minBedrooms}
+                    onChange={(event) => update({ minBedrooms: event.target.value })}
+                  >
+                    <option value="">Any</option>
+                    {roomCounts.map((n) => (
+                      <option key={n} value={n}>
+                        {n}+
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="filter-bathrooms"
+                    className="mb-2 block text-sm font-medium text-ink-900"
+                  >
+                    Bathrooms
+                  </label>
+                  <Select
+                    id="filter-bathrooms"
+                    value={filters.minBathrooms}
+                    onChange={(event) => update({ minBathrooms: event.target.value })}
+                  >
+                    <option value="">Any</option>
+                    {roomCounts.map((n) => (
+                      <option key={n} value={n}>
+                        {n}+
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+              </div>
+
+              {/*
+                Ticking two boxes means both are required, which is how the API
+                reads them — not "either one will do".
+              */}
+              <fieldset className="sm:col-span-2 lg:col-span-3">
+                <legend className="mb-2 text-sm font-medium text-ink-900">
+                  Must have
+                </legend>
+                <div className="flex flex-wrap gap-x-5 gap-y-2.5">
+                  {amenityTagOptions.map((option) => (
+                    <label
+                      key={option.value}
+                      className="flex cursor-pointer items-center gap-2 text-sm text-ink-700"
+                    >
+                      <Checkbox
+                        checked={filters.amenities.includes(option.value)}
+                        onChange={(event) =>
+                          toggleAmenity(option.value, event.target.checked)
+                        }
+                      />
+                      {option.label}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+
               <div className="flex items-end">
-                <label htmlFor="filter-verified" className="flex items-center gap-2 text-sm font-medium text-ink-900 cursor-pointer">
+                <label
+                  htmlFor="filter-verified"
+                  className="flex cursor-pointer items-center gap-2 text-sm font-medium text-ink-900"
+                >
                   <Checkbox
                     id="filter-verified"
-                    checked={verifiedOnly}
-                    onChange={(event) => setVerifiedOnly(event.target.checked)}
+                    checked={filters.verifiedOnly}
+                    onChange={(event) => update({ verifiedOnly: event.target.checked })}
                   />
                   Verified only
                 </label>
@@ -252,12 +444,7 @@ export function PropertySearch({
                 <p className="text-sm text-ink-600">
                   {activeFilters} active {activeFilters === 1 ? "filter" : "filters"}
                 </p>
-                <Button
-                  type="button"
-                  tone="ghost"
-                  size="sm"
-                  onClick={handleClearFilters}
-                >
+                <Button type="button" tone="ghost" size="sm" onClick={handleClearFilters}>
                   <X aria-hidden="true" className="size-4" />
                   Clear all
                 </Button>
@@ -283,16 +470,11 @@ export function PropertySearch({
           {isError && (
             <ErrorState
               title="Could not load properties"
-              description={
-                error instanceof Error
-                  ? error.message
-                  : "We're having trouble loading the listings. Please try again."
-              }
-              action={
-                <Button onClick={() => window.location.reload()}>
-                  Reload page
-                </Button>
-              }
+              description={messageFrom(
+                error,
+                "We're having trouble loading the listings. Please try again.",
+              )}
+              action={<Button onClick={() => window.location.reload()}>Reload page</Button>}
             />
           )}
 
@@ -315,11 +497,34 @@ export function PropertySearch({
 
           {data && data.properties.length > 0 && (
             <>
-              <div className="mb-6 flex items-center justify-between">
+              <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
                 <p className="text-sm text-ink-600">
                   Showing {data.properties.length} of {data.total}{" "}
                   {data.total === 1 ? "property" : "properties"}
                 </p>
+
+                <div className="flex items-center gap-2">
+                  <label
+                    htmlFor="sort-order"
+                    className="text-sm font-medium text-ink-700"
+                  >
+                    Sort by
+                  </label>
+                  <Select
+                    id="sort-order"
+                    value={filters.sort}
+                    onChange={(event) =>
+                      update({ sort: event.target.value as PropertySort })
+                    }
+                    className="w-auto"
+                  >
+                    {propertySortOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
               </div>
 
               <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">

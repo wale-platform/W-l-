@@ -152,6 +152,155 @@ describe("GET /properties", () => {
   });
 });
 
+/**
+ * The filters exist so a student can narrow 12,000 listings to the six worth
+ * visiting. Each test below pins the SHAPE of the query rather than a row count,
+ * because the failure these guard against is not "wrong results" — it is a
+ * filter that quietly matches nothing and reads as "no listings available".
+ */
+describe("GET /properties — filters", () => {
+  function emptyList() {
+    prismaMock.property.findMany.mockResolvedValue([] as never);
+    prismaMock.property.count.mockResolvedValue(0);
+  }
+
+  function whereFrom() {
+    return prismaMock.property.findMany.mock.calls[0]![0]!.where;
+  }
+
+  it("matches city and state case-insensitively, but exactly", async () => {
+    emptyList();
+
+    await request(app).get(`${API}/properties?city=yaba&state=lagos`);
+
+    // `equals` not `contains`: a search for Lagos must not return Lagos Island.
+    expect(whereFrom()).toMatchObject({
+      city: { equals: "yaba", mode: "insensitive" },
+      state: { equals: "lagos", mode: "insensitive" },
+    });
+  });
+
+  it("treats bedrooms and bathrooms as minimums", async () => {
+    emptyList();
+
+    await request(app).get(`${API}/properties?minBedrooms=2&minBathrooms=1`);
+
+    expect(whereFrom()).toMatchObject({
+      bedrooms: { gte: 2 },
+      bathrooms: { gte: 1 },
+    });
+  });
+
+  it("requires every amenity asked for, not any of them", async () => {
+    emptyList();
+
+    await request(app).get(`${API}/properties?amenities=water,backup_power`);
+
+    // Someone ticking two boxes is stating two requirements.
+    expect(whereFrom()).toMatchObject({
+      amenityTags: { hasEvery: ["water", "backup_power"] },
+    });
+  });
+
+  it("rejects an unknown amenity tag instead of ignoring it", async () => {
+    const res = await request(app).get(`${API}/properties?amenities=water,swimming_pool`);
+
+    // Dropping the tag we don't know would widen the results past what was
+    // asked for and present them as matches.
+    expect(res.status).toBe(422);
+    expect(prismaMock.property.findMany).not.toHaveBeenCalled();
+  });
+
+  it("accepts a university id", async () => {
+    emptyList();
+
+    await request(app).get(`${API}/properties?university=unilag`);
+
+    expect(whereFrom()).toMatchObject({ university: "unilag" });
+  });
+
+  it("rejects a university display name, which would match nothing", async () => {
+    const res = await request(app).get(
+      `${API}/properties?university=${encodeURIComponent("University of Lagos")}`,
+    );
+
+    // The column stores ids. Accepting the display name would return an empty
+    // page that looks like "no housing near UNILAG".
+    expect(res.status).toBe(422);
+    expect(prismaMock.property.findMany).not.toHaveBeenCalled();
+  });
+
+  it("ignores blank filter values rather than filtering on empty strings", async () => {
+    emptyList();
+
+    await request(app).get(`${API}/properties?city=&university=&query=`);
+
+    const where = whereFrom();
+    expect(where).not.toHaveProperty("city");
+    expect(where).not.toHaveProperty("university");
+    expect(where).not.toHaveProperty("OR");
+  });
+
+  it("searches the neighborhood as well as the address", async () => {
+    emptyList();
+
+    await request(app).get(`${API}/properties?query=Akoka`);
+
+    // "Akoka" is an area name, which is how students actually search.
+    expect(whereFrom()!.OR).toEqual(
+      expect.arrayContaining([{ neighborhood: { contains: "Akoka", mode: "insensitive" } }]),
+    );
+  });
+});
+
+describe("GET /properties — sorting", () => {
+  function emptyList() {
+    prismaMock.property.findMany.mockResolvedValue([] as never);
+    prismaMock.property.count.mockResolvedValue(0);
+  }
+
+  function orderFrom() {
+    return prismaMock.property.findMany.mock.calls[0]![0]!.orderBy;
+  }
+
+  it("defaults to newest first", async () => {
+    emptyList();
+
+    await request(app).get(`${API}/properties`);
+
+    expect(orderFrom()).toEqual([{ createdAt: "desc" }, { id: "desc" }]);
+  });
+
+  it("sorts by price in both directions", async () => {
+    emptyList();
+    await request(app).get(`${API}/properties?sort=price_asc`);
+    expect(orderFrom()).toEqual([{ price: "asc" }, { id: "desc" }]);
+
+    prismaMock.property.findMany.mockClear();
+    emptyList();
+    await request(app).get(`${API}/properties?sort=price_desc`);
+    expect(orderFrom()).toEqual([{ price: "desc" }, { id: "desc" }]);
+  });
+
+  it("always breaks ties on id, so paging cannot skip or repeat a listing", async () => {
+    emptyList();
+
+    await request(app).get(`${API}/properties?sort=price_asc&page=2`);
+
+    // Two listings at ₦450,000 with no tiebreak may swap between pages, and one
+    // of them is then never shown.
+    const order = orderFrom() as { id?: string }[];
+    expect(order[order.length - 1]).toEqual({ id: "desc" });
+  });
+
+  it("rejects an unknown sort rather than falling back silently", async () => {
+    const res = await request(app).get(`${API}/properties?sort=cheapest`);
+
+    expect(res.status).toBe(422);
+    expect(prismaMock.property.findMany).not.toHaveBeenCalled();
+  });
+});
+
 describe("GET /properties/:id", () => {
   it("returns a single serialized property", async () => {
     prismaMock.property.findFirst.mockResolvedValue(
@@ -367,6 +516,94 @@ describe("POST /properties — creating a listing", () => {
 });
 
 /* -------------------------------------------------- ownership boundary -- */
+
+/**
+ * `amenityTags` is what the amenity filter matches. It is derived from the
+ * landlord's own words on every write, so these tests are really about the
+ * filter: a listing whose tags were not recomputed is a listing that answers the
+ * wrong search.
+ */
+describe("amenity tags are derived on write", () => {
+  it("derives tags from the landlord's free text when creating", async () => {
+    prismaMock.property.create.mockResolvedValue(
+      makeProperty({ status: "DRAFT" }) as never,
+    );
+
+    await send(
+      "post",
+      "/properties",
+      {
+        ...VALID_LISTING,
+        amenities: ["Borehole water", "Estate security", "Solar backup", "Newly painted"],
+      },
+      signedInAs(landlord()),
+    );
+
+    const { data } = prismaMock.property.create.mock.calls[0]![0];
+    // The words are kept verbatim for the listing page…
+    expect(data.amenities).toEqual([
+      "Borehole water",
+      "Estate security",
+      "Solar backup",
+      "Newly painted",
+    ]);
+    // …and the searchable form sits alongside them. "Newly painted" maps to
+    // nothing, and that is the honest answer rather than a guess.
+    expect(data.amenityTags).toEqual(["water", "backup_power", "security"]);
+  });
+
+  it("re-derives tags when an edit changes the amenities", async () => {
+    prismaMock.property.findFirst.mockResolvedValue({
+      id: "prop_1",
+      status: "DRAFT",
+    } as never);
+    prismaMock.property.update.mockResolvedValue(makeProperty({ status: "DRAFT" }) as never);
+
+    await send(
+      "patch",
+      "/properties/prop_1",
+      { amenities: ["Prepaid meter"] },
+      signedInAs(landlord()),
+    );
+
+    // Dropping the borehole from the text must drop it from the tags too, or the
+    // listing keeps answering a "running water" search it no longer satisfies.
+    expect(prismaMock.property.update.mock.calls[0]![0].data.amenityTags).toEqual([
+      "prepaid_meter",
+    ]);
+  });
+
+  it("leaves tags alone when an edit does not touch the amenities", async () => {
+    prismaMock.property.findFirst.mockResolvedValue({
+      id: "prop_1",
+      status: "DRAFT",
+    } as never);
+    prismaMock.property.update.mockResolvedValue(makeProperty({ status: "DRAFT" }) as never);
+
+    await send("patch", "/properties/prop_1", { title: "A quieter title entirely" }, signedInAs(landlord()));
+
+    // Absent means "leave it", the same rule `images` follows — recomputing from
+    // an undefined list would wipe the tags.
+    expect(prismaMock.property.update.mock.calls[0]![0].data).not.toHaveProperty("amenityTags");
+  });
+
+  it("ignores client-supplied tags", async () => {
+    prismaMock.property.create.mockResolvedValue(makeProperty({ status: "DRAFT" }) as never);
+
+    await send(
+      "post",
+      "/properties",
+      { ...VALID_LISTING, amenities: ["Prepaid meter"], amenityTags: ["water", "parking"] },
+      signedInAs(landlord()),
+    );
+
+    // Tags are a claim shown to students. They follow from the description, not
+    // from what the client would like the listing to rank for.
+    expect(prismaMock.property.create.mock.calls[0]![0].data.amenityTags).toEqual([
+      "prepaid_meter",
+    ]);
+  });
+});
 
 describe("PATCH /properties/:id — ownership", () => {
   it("scopes the lookup by ownerId, so another landlord's listing is 404", async () => {

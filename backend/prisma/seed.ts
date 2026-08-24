@@ -8,6 +8,7 @@ import {
 } from "@prisma/client";
 
 import { hashPassword } from "../src/lib/crypto";
+import { deriveAmenityTags } from "../src/modules/properties/amenity-tags";
 
 /**
  * Database seed.
@@ -471,6 +472,10 @@ async function seedProperties() {
         latitude: p.lat,
         longitude: p.lng,
         amenities: p.amenities,
+        // Derived, never hand-written — the same call the API makes on every
+        // write, so a seeded listing is findable by the amenity filter on the
+        // same terms as one a landlord posts.
+        amenityTags: deriveAmenityTags(p.amenities),
         availableDate: new Date(`${p.availableDate}T00:00:00.000Z`),
         contactName: p.contactName,
         contactPhone: p.contactPhone,

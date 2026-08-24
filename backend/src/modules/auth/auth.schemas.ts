@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { universitySchema } from "../../lib/universities";
 import { nigerianPhone } from "../../lib/zod-fields";
 
 /**
@@ -50,7 +51,11 @@ export const registerSchema = z
     // Optional, matching the nullable column. Wale started student-focused, but
     // a landlord or mover has no university, and requiring it here would make
     // those roles unregisterable. The tenant UI still collects it.
-    university: z.string().min(1, "Please select your university").optional(),
+    //
+    // A controlled id ("unilag"), same vocabulary a listing uses — see
+    // lib/universities.ts. Storing free text here would make "students near my
+    // campus" unanswerable for the account it was typed on.
+    university: universitySchema.optional(),
   })
   .refine((d) => Boolean(d.name ?? d.firstName), {
     message: "Provide either name or firstName",
