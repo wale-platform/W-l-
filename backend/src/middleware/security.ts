@@ -67,5 +67,30 @@ export const authRateLimiter = rateLimit({
   },
 });
 
+/**
+ * Limiter for upload signatures.
+ *
+ * Every ticket lets the holder write one file into our Cloudinary account, and
+ * the request is cheap for the client but not for us. The default is generous
+ * for real use — a landlord adding fifteen photos to each of several listings —
+ * and far below what it takes to fill a storage quota.
+ *
+ * Keyed per IP like the others, which is the coarser of the two options; a
+ * per-user key would be tighter, but it is the account-independent flood we care
+ * about most here.
+ */
+export const uploadRateLimiter = rateLimit({
+  windowMs: env.RATE_LIMIT_WINDOW_MS,
+  limit: env.UPLOAD_RATE_LIMIT_MAX,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  handler: (_req, res) => {
+    const e = new TooManyRequestsError(
+      "That is a lot of photos at once. Please wait a moment and try again.",
+    );
+    sendError(res, e.statusCode, e.code, e.message);
+  },
+});
+
 /** Trust the first proxy hop in production so client IPs / secure cookies work. */
 export const trustProxy = isProd ? 1 : false;

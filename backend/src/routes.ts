@@ -3,6 +3,7 @@ import { Router } from "express";
 import { authRouter } from "./modules/auth/auth.routes";
 import { contactRouter } from "./modules/contact/contact.routes";
 import { healthRouter } from "./modules/health/health.routes";
+import { mediaRouter } from "./modules/media/media.routes";
 import { propertyRouter } from "./modules/properties/property.routes";
 import { userRouter } from "./modules/users/user.routes";
 
@@ -16,4 +17,5 @@ apiV1Router.use("/health", healthRouter);
 apiV1Router.use("/auth", authRouter);
 apiV1Router.use("/users", userRouter);
 apiV1Router.use("/properties", propertyRouter);
+apiV1Router.use("/media", mediaRouter);
 apiV1Router.use("/contact", contactRouter);

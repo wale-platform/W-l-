@@ -413,14 +413,20 @@ describe("POST /properties — creating a listing", () => {
     await send(
       "post",
       "/properties",
-      { ...VALID_LISTING, images: ["https://cdn.test/a.jpg", "https://cdn.test/b.jpg"] },
+      {
+        ...VALID_LISTING,
+        images: [
+          "https://res.cloudinary.com/demo/image/upload/a.jpg",
+          "https://res.cloudinary.com/demo/image/upload/b.jpg",
+        ],
+      },
       signedInAs(landlord()),
     );
 
     expect(prismaMock.property.create.mock.calls[0]![0].data.images).toEqual({
       create: [
-        { url: "https://cdn.test/a.jpg", position: 0 },
-        { url: "https://cdn.test/b.jpg", position: 1 },
+        { url: "https://res.cloudinary.com/demo/image/upload/a.jpg", position: 0 },
+        { url: "https://res.cloudinary.com/demo/image/upload/b.jpg", position: 1 },
       ],
     });
   });
@@ -486,6 +492,32 @@ describe("POST /properties — creating a listing", () => {
     );
 
     expect(res.status).toBe(422);
+    expect(prismaMock.property.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects an image hosted anywhere but our own storage", async () => {
+    // A photo on a host we do not control can be replaced after the listing has
+    // been verified — the badge would still say verified while the pictures had
+    // changed. Photos come from the signed upload flow (see media.routes.ts) or
+    // from our own first-party imagery, and from nowhere else.
+    for (const url of [
+      "https://images.example.com/a.jpg",
+      "https://res.cloudinary.com.evil.example/demo/image/upload/a.jpg",
+      "http://res.cloudinary.com/demo/image/upload/a.jpg",
+    ]) {
+      const res = await send(
+        "post",
+        "/properties",
+        { ...VALID_LISTING, images: [url] },
+        signedInAs(landlord()),
+      );
+
+      expect(res.status, url).toBe(422);
+      expect(res.body.error.details).toEqual([
+        expect.objectContaining({ field: "images.0" }),
+      ]);
+    }
+
     expect(prismaMock.property.create).not.toHaveBeenCalled();
   });
 
@@ -699,7 +731,7 @@ describe("PATCH /properties/:id — ownership", () => {
     await send(
       "patch",
       "/properties/prop_1",
-      { images: ["https://cdn.test/new.jpg"] },
+      { images: ["https://res.cloudinary.com/demo/image/upload/new.jpg"] },
       signedInAs(landlord()),
     );
 
@@ -707,7 +739,13 @@ describe("PATCH /properties/:id — ownership", () => {
       where: { propertyId: "prop_1" },
     });
     expect(prismaMock.propertyImage.createMany).toHaveBeenCalledWith({
-      data: [{ propertyId: "prop_1", url: "https://cdn.test/new.jpg", position: 0 }],
+      data: [
+        {
+          propertyId: "prop_1",
+          url: "https://res.cloudinary.com/demo/image/upload/new.jpg",
+          position: 0,
+        },
+      ],
     });
   });
 

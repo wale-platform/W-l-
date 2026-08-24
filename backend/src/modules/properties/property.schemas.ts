@@ -1,6 +1,7 @@
 import { PropertyStatus } from "@prisma/client";
 import { z } from "zod";
 
+import { isCloudinaryDeliveryUrl } from "../../lib/cloudinary";
 import { universitySchema } from "../../lib/universities";
 import { dateOnly, nigerianPhone } from "../../lib/zod-fields";
 import { amenityTagSchema } from "./amenity-tags";
@@ -98,19 +99,27 @@ const MAX_IMAGES = 15;
 /**
  * An image location we are willing to store.
  *
- * `https://` (Cloudinary, in production) or a root-relative path (the local
- * mock imagery). Protocol-relative `//host/x` is rejected explicitly: it looks
- * root-relative but resolves to an arbitrary host, so allowing it would let a
- * listing pull images from anywhere.
+ * Either an asset in our own Cloudinary account, or a root-relative path (the
+ * first-party mock imagery under `public/listings/`). Nothing else.
+ *
+ * Any `https://` host used to be accepted, which was too loose in two ways.
+ * `next.config.ts` only lets `next/image` load `res.cloudinary.com`, so a URL on
+ * another host stored fine and then failed to render. And a photo on a host we do
+ * not control can be swapped after we have verified the listing — the badge would
+ * still say verified while the pictures had changed to something else entirely.
+ *
+ * Protocol-relative `//host/x` is rejected explicitly: it looks root-relative but
+ * resolves to an arbitrary host.
  */
 const imageUrl = z
   .string()
   .trim()
   .min(1)
   .max(2048)
-  .refine((v) => v.startsWith("https://") || (v.startsWith("/") && !v.startsWith("//")), {
-    message: "Images must be an https:// URL or a root-relative path",
-  });
+  .refine(
+    (v) => isCloudinaryDeliveryUrl(v) || (v.startsWith("/") && !v.startsWith("//")),
+    { message: "Add photos with the upload button — we can't accept an image hosted elsewhere" },
+  );
 
 /**
  * Every field a client may set on a listing.

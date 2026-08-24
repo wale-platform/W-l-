@@ -57,8 +57,15 @@ const envSchema = z
     RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(900_000),
     RATE_LIMIT_MAX: z.coerce.number().int().positive().default(300),
     AUTH_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(20),
+    UPLOAD_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(120),
 
-    // Cloudinary (optional; media wiring is a later phase)
+    // Cloudinary — direct-to-provider image uploads, signed server-side.
+    // Optional so the app boots without it: uploads then answer 503 and say so,
+    // which is the honest behaviour for a missing dependency. All three are
+    // required together (see lib/cloudinary.ts).
+    //
+    // API_SECRET must never reach the browser and must never be copied into a
+    // NEXT_PUBLIC_ variable — the frontend gets a signature, never the secret.
     CLOUDINARY_CLOUD_NAME: z.string().optional(),
     CLOUDINARY_API_KEY: z.string().optional(),
     CLOUDINARY_API_SECRET: z.string().optional(),
