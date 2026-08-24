@@ -17,7 +17,10 @@
  *    `propertyFormSchema` without errors, so the edit form never opens with
  *    complaints about fields nobody touched,
  *  - a real rejection yields a human sentence through `messageFrom()` and lands
- *    on the right input through `fieldErrorsFrom()`.
+ *    on the right input through `fieldErrorsFrom()`,
+ *  - the upload-signature endpoint hands the browser a ticket shaped the way
+ *    `uploadTicketSchema` expects — or, where no Cloudinary credentials are
+ *    configured, a clean 503 the form can explain.
  *
  * Transport is plain fetch plus a tiny cookie jar, and the envelope-unwrap and
  * error-flatten steps mirror `src/lib/api/client.ts` exactly — otherwise the
@@ -26,9 +29,13 @@
  * Run with the backend up:
  *   backend/node_modules/.bin/tsx scripts/verify-property-contract.mts
  *
- * It deletes the listings it creates. It leaves TWO throwaway accounts behind:
- * propcheck+<stamp>a@wale.test and propcheck+<stamp>b@wale.test. To remove:
- *   DELETE FROM "User" WHERE email LIKE 'propcheck+%@wale.test';
+ * It deletes the listings it creates. It leaves THREE throwaway accounts behind:
+ * propcheck+<stamp>a@wale.test (landlord), b (a second landlord, for the
+ * ownership checks) and c (a tenant, for the role gates). To remove:
+ *   cd backend && npx tsx scripts/clean-test-accounts.ts --delete
+ *
+ * That script also prints the table counts either side, which is how a run is
+ * shown to have left the shared database where it found it.
  */
 
 import {
@@ -40,6 +47,7 @@ import {
   propertyFormValuesFrom,
   propertyListResponseSchema,
   propertySortOptions,
+  uploadTicketSchema,
   type PropertyFormValues,
 } from "../src/lib/api/schemas";
 import { fieldErrorsFrom, messageFrom, statusOf } from "../src/lib/api/field-errors";
@@ -219,6 +227,10 @@ const FORM_INPUT: PropertyFormValues = {
   university: "unilag",
   availableDate: "2026-10-01",
   amenities: "Borehole, Prepaid meter, Security",
+  // What the uploader would have produced: already-uploaded locations, not files.
+  // A root-relative path rather than a Cloudinary URL, so the check runs without
+  // media credentials — the backend accepts both (see property.schemas.ts).
+  images: ["/listings/listing-01.jpg", "/listings/listing-02.jpg"],
   contactName: "Ada Okoye",
   contactPhone: "08031234567",
   contactEmail: "ada@example.com",
@@ -273,6 +285,11 @@ let propertyId = "";
       "amenities came back as the array the schema built",
       parsed.data.amenities.join("|") === "Borehole|Prepaid meter|Security",
       JSON.stringify(parsed.data.amenities),
+    );
+    check(
+      "photos came back in the order they were given",
+      parsed.data.images.join("|") === FORM_INPUT.images.join("|"),
+      JSON.stringify(parsed.data.images),
     );
     check(
       "the published contact is the one we sent, not the login email",
@@ -369,7 +386,22 @@ if (!propertyId) {
 
 // 5. A refusal reads as a sentence, not as an axios string.
 {
-  const r = await owner.call("POST", `/properties/${propertyId}/submit`);
+  /**
+   * On its own throwaway listing, not on `propertyId`.
+   *
+   * The photo gate needs a photoless draft, and a successful submit moves a
+   * listing out of DRAFT for good — so doing either to the main listing would
+   * quietly change what sections 6-8 are looking at.
+   */
+  const photoless = await owner.call("POST", "/properties", {
+    ...propertyFormSchema.parse(FORM_INPUT),
+    images: [],
+    title: "Draft with no photographs attached to it yet",
+  });
+  const photolessId = ownerPropertySchema.safeParse(photoless.data).data?.id;
+  check("a photoless draft can be created", Boolean(photolessId), `got ${photoless.status}`);
+
+  const r = await owner.call("POST", `/properties/${photolessId}/submit`);
   check(
     "submitting a photoless draft is refused",
     r.status === 422 || r.status === 400,
@@ -388,6 +420,27 @@ if (!propertyId) {
     message,
   );
   check("the error body parses with apiErrorSchema", apiErrorSchema.safeParse(r.error?.response.data).success);
+
+  // The other half of the same claim: the gate is about the photos, so adding
+  // one clears it. Without this, a backend that refused every submit would pass.
+  const withPhoto = await owner.call("PATCH", `/properties/${photolessId}`, {
+    images: FORM_INPUT.images.slice(0, 1),
+  });
+  check("adding a photo to that draft succeeds", withPhoto.status === 200, `got ${withPhoto.status}`);
+
+  const retry = await owner.call("POST", `/properties/${photolessId}/submit`);
+  check(
+    "the same draft can be submitted once it has a photo",
+    retry.status === 200,
+    `got ${retry.status} ${messageFrom(retry.error, "").slice(0, 120)}`,
+  );
+  check(
+    "submitting puts it in the review queue",
+    ownerPropertySchema.safeParse(retry.data).data?.status === "PENDING_VERIFICATION",
+    String(ownerPropertySchema.safeParse(retry.data).data?.status),
+  );
+
+  await owner.call("DELETE", `/properties/${photolessId}`);
 }
 
 // 6. A field-level rejection lands on the field.
@@ -682,7 +735,91 @@ if (!propertyId) {
   }
 }
 
-// 11. Clean up after ourselves.
+// 11. The photo upload endpoint, as far as it can be checked without an account.
+{
+  /**
+   * Whether a real Cloudinary upload works cannot be checked here — there are no
+   * credentials in this environment, and putting a live account's secret in a
+   * checked-in script would be worse than not testing it.
+   *
+   * What IS checked: who may ask, that the client cannot choose where the file
+   * lands, that a secret never appears in the response, and that an unconfigured
+   * server says so honestly instead of returning a broken signature. The signing
+   * algorithm itself is pinned against Cloudinary's published worked examples in
+   * `backend/tests/media.test.ts`.
+   */
+  const anon = await new Session().call("POST", "/media/upload-signature", {});
+  check(
+    "POST /media/upload-signature needs a session",
+    anon.status === 401,
+    `got ${anon.status}`,
+  );
+
+  const asTenant = new Session();
+  await asTenant.signUp(`propcheck+${stamp}c@wale.test`, "TENANT");
+  const tenantTry = await asTenant.call("POST", "/media/upload-signature", {});
+  check(
+    "a tenant cannot ask for an upload signature",
+    tenantTry.status === 403,
+    `got ${tenantTry.status}`,
+  );
+
+  const chosenFolder = await owner.call("POST", "/media/upload-signature", {
+    folder: "wale/properties/somebody-else",
+  });
+  check(
+    "a caller cannot choose the folder its upload lands in",
+    chosenFolder.status === 422,
+    `got ${chosenFolder.status}`,
+  );
+
+  const r = await owner.call("POST", "/media/upload-signature", {});
+  const configured = r.status === 200;
+
+  if (configured) {
+    // Parsed with the schema the uploader itself uses, so a renamed or dropped
+    // key fails here rather than inside a landlord's photo picker.
+    const parsed = uploadTicketSchema.safeParse(r.data);
+    check(
+      "the ticket parses as uploadTicketSchema",
+      parsed.success,
+      parsed.success ? "" : JSON.stringify(parsed.error.issues.slice(0, 3)),
+    );
+
+    if (parsed.success) {
+      const ticket = parsed.data;
+      check(
+        "the ticket carries a signature and an api_key",
+        Boolean(ticket.fields.signature && ticket.fields.api_key),
+        JSON.stringify(Object.keys(ticket.fields)),
+      );
+      check(
+        "the upload is scoped to the caller's own folder",
+        ticket.publicId.startsWith("wale/properties/") && !ticket.publicId.includes(".."),
+        ticket.publicId,
+      );
+      check(
+        "the signature has not already expired",
+        Date.parse(ticket.expiresAt) > Date.now(),
+        ticket.expiresAt,
+      );
+    }
+
+    check(
+      "the response contains no api_secret field",
+      !JSON.stringify(r.data).includes("api_secret"),
+    );
+  } else {
+    check(
+      "an unconfigured server answers 503 and says photos can be added later",
+      r.status === 503 && /add photos later/i.test(messageFrom(r.error, "")),
+      `got ${r.status} ${messageFrom(r.error, "").slice(0, 120)}`,
+    );
+    console.log("        (no Cloudinary credentials here — the live upload is untested)");
+  }
+}
+
+// 12. Clean up after ourselves.
 {
   const r = await owner.call("DELETE", `/properties/${propertyId}`);
   check("DELETE /properties/:id removes the listing", r.status === 200 || r.status === 204, `got ${r.status}`);
@@ -692,6 +829,6 @@ if (!propertyId) {
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
-console.log(`Left behind: ${emailA}, ${emailB}`);
-console.log(`Clean up with: DELETE FROM "User" WHERE email LIKE 'propcheck+%@wale.test';`);
+console.log(`Left behind: ${emailA}, ${emailB}, propcheck+${stamp}c@wale.test`);
+console.log(`Clean up with: cd backend && npx tsx scripts/clean-test-accounts.ts --delete`);
 process.exit(failed === 0 ? 0 : 1);

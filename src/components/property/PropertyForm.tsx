@@ -2,10 +2,10 @@
 
 import { useEffect } from "react";
 import Link from "next/link";
-import { useForm } from "react-hook-form";
+import { useController, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Building2, MapPin, Phone } from "lucide-react";
+import { Building2, Camera, MapPin, Phone } from "lucide-react";
 
 import {
   Alert,
@@ -27,6 +27,7 @@ import {
   type PropertyFormValues,
   type PropertyPayload,
 } from "@/lib/api/schemas";
+import { ImageUploader } from "./ImageUploader";
 
 /**
  * The listing form, shared by every surface that writes a property: a landlord
@@ -84,6 +85,7 @@ const EMPTY: PropertyFormValues = {
   university: "",
   availableDate: "",
   amenities: "",
+  images: [],
   contactName: "",
   contactPhone: "",
   contactEmail: "",
@@ -142,6 +144,7 @@ export function PropertyForm({
     register,
     handleSubmit,
     setError,
+    control,
     formState: { errors },
   } = useForm<PropertyFormValues, unknown, PropertyPayload>({
     resolver: zodResolver(
@@ -150,6 +153,10 @@ export function PropertyForm({
     mode: "onBlur",
     defaultValues: { ...EMPTY, ...defaultValues },
   });
+
+  // Photos are not typed into an input, so they go through the controller rather
+  // than `register` — the uploader hands back a whole array at a time.
+  const images = useController({ control, name: "images" });
 
   // A rejection from the server is ordinary validation as far as the person
   // filling in the form is concerned, so put it on the field it belongs to
@@ -308,6 +315,33 @@ export function PropertyForm({
               />
             )}
           </FormField>
+        </CardBody>
+      </Card>
+
+      {/* ── Photos ───────────────────────────────────────────────────────── */}
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            <span className="flex items-center gap-2">
+              <Camera aria-hidden="true" className="size-4 text-brand-600" />
+              Photos
+            </span>
+          </CardTitle>
+          <CardDescription>
+            The first photo is the one students see in search results. Show the
+            rooms, the compound and the water supply — listings without photos
+            are rarely opened, and a listing needs at least one before it can go
+            for review.
+          </CardDescription>
+        </CardHeader>
+
+        <CardBody>
+          <ImageUploader
+            value={images.field.value}
+            onChange={images.field.onChange}
+            error={errors.images?.message}
+            disabled={isPending}
+          />
         </CardBody>
       </Card>
 

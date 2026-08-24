@@ -308,10 +308,16 @@ export type MyPropertiesParams = z.infer<typeof myPropertiesParamsSchema>;
  * `status`, `source`, and `ownerId` are absent on purpose: they are trust
  * signals the server derives, and sending them accomplishes nothing.
  *
- * `images` is absent too — photos are uploaded separately (Cloudinary signed
- * uploads), and the backend deliberately allows a photoless DRAFT while
- * refusing to put one into the review queue.
+ * `images` IS part of the schema, but it is the one field no `<input>` fills in:
+ * photos go straight from the browser to Cloudinary and what comes back is a
+ * list of URLs (see `mediaApi.uploadImage`). It lives here anyway, because the
+ * form submits it and the server validates it — keeping it out would mean a
+ * hand-written mapper merging it in, which is the drift this schema exists to
+ * prevent.
  */
+
+/** Matches the backend's own cap, so the form cannot offer a 16th photo. */
+export const MAX_PROPERTY_IMAGES = 15;
 
 /** An empty box means "not provided", which is not the same as an empty value. */
 function optionalField<T extends z.ZodTypeAny>(schema: T) {
@@ -401,6 +407,17 @@ export const propertyFormSchema = z.object({
       (list) => list.every((item) => item.length <= 60),
       "Each amenity should be a short phrase, not a paragraph",
     ),
+  /**
+   * Photo URLs, in display order — the first one is the cover.
+   *
+   * Already-uploaded locations, not files: `ImageUploader` sends each file to
+   * Cloudinary and appends the URL it gets back. A photoless listing is allowed
+   * here because the backend allows a photoless DRAFT; it is submitting for
+   * review that requires a photo, and that rule is enforced there.
+   */
+  images: z
+    .array(z.string().min(1))
+    .max(MAX_PROPERTY_IMAGES, `Keep it to ${MAX_PROPERTY_IMAGES} photos or fewer`),
   // The contact published ON the listing. Left blank, the server falls back to
   // the creating account's own name and phone — which is what a landlord
   // listing their own place wants. A lawyer acting for a landlord fills these
@@ -449,6 +466,9 @@ export function propertyFormValuesFrom(property: OwnerProperty): PropertyFormVal
     university: property.university ?? "",
     availableDate: property.availableDate,
     amenities: property.amenities.join(", "),
+    // Restored, not dropped: the form always sends `images`, so opening an edit
+    // without them and saving would delete the listing's whole gallery.
+    images: property.images,
     contactName: property.landlord.name,
     contactPhone: property.landlord.phone,
     contactEmail: property.landlord.email ?? "",
@@ -544,6 +564,42 @@ export type SearchParams = z.input<typeof searchParamsSchema>;
 
 /** What goes on the wire, after `amenities` is joined. */
 export type SearchQuery = z.output<typeof searchParamsSchema>;
+
+/* ------------------------------------------------------------- Media -- */
+
+/**
+ * `POST /media/upload-signature` — permission to upload one photo.
+ *
+ * The browser sends the file DIRECTLY to Cloudinary; it never travels through
+ * our API. So this is all the server hands over: where to post, and a bag of
+ * form fields to send with the file.
+ *
+ * `fields` is opaque on purpose and typed as a plain record. Every field in it
+ * was signed by the server, and a signature only verifies if the exact same set
+ * of fields is posted — so the client's job is to copy them across untouched, not
+ * to know what any of them mean. Naming them here would invite editing them.
+ *
+ * The API secret is never part of this response. That is the entire reason the
+ * endpoint exists (see `backend/src/lib/cloudinary.ts`).
+ */
+export const uploadTicketSchema = z.object({
+  uploadUrl: z.string().url(),
+  fields: z.record(z.string()),
+  publicId: z.string().min(1),
+  expiresAt: z.string(),
+});
+
+export type UploadTicket = z.infer<typeof uploadTicketSchema>;
+
+/**
+ * What Cloudinary answers with. Only the two fields we use are described —
+ * the real response has around thirty, and asserting on the rest would break
+ * the upload flow the day the provider adds a field.
+ */
+export const cloudinaryUploadResultSchema = z.object({
+  secure_url: z.string().url(),
+  public_id: z.string(),
+});
 
 /* ----------------------------------------------------------- Contact -- */
 

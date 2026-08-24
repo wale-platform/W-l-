@@ -15,7 +15,7 @@
  *   (or: backend/node_modules/.bin/tsx scripts/verify-auth-contract.ts)
  *
  * Leaves ONE throwaway account behind: authcheck+<epoch>@wale.test. To remove:
- *   DELETE FROM "User" WHERE email LIKE 'authcheck+%@wale.test';
+ *   cd backend && npx tsx scripts/clean-test-accounts.ts --delete
  */
 
 import {
