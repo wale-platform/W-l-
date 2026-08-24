@@ -21,7 +21,7 @@ const defaultInspections: InspectionRequest[] = [
   {
     id: "insp-001",
     propertyId: "wale-001",
-    propertyTitle: "Modern self-contained studio at Akoka",
+    propertyTitle: "Modern self-contained studio at Tanke",
     propertyImage: "/listings/listing-01.jpg",
     price: 850000,
     date: "2026-08-25",
@@ -124,5 +124,31 @@ export const inspectionsApi = {
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated));
 
     return { ...target, status: "CANCELLED" };
+  },
+
+  /**
+   * Update status of an inspection request (Landlord / Admin action).
+   */
+  async updateStatus(id: string, status: InspectionStatus): Promise<InspectionRequest> {
+    await new Promise((resolve) => setTimeout(resolve, 800));
+
+    if (typeof window === "undefined") {
+      throw new Error("Cannot modify state on server side");
+    }
+
+    const current = await inspectionsApi.listRequests();
+    const target = current.find((r) => r.id === id);
+    
+    if (!target) {
+      throw new Error("Inspection request not found");
+    }
+
+    const updated = current.map((r) =>
+      r.id === id ? { ...r, status } : r
+    );
+    
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated));
+
+    return { ...target, status };
   },
 };

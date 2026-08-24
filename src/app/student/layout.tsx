@@ -27,11 +27,29 @@ export default function StudentLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const loggedIn = localStorage.getItem("wale_is_logged_in") === "true";
+      const role = localStorage.getItem("wale_role");
+      const userStr = localStorage.getItem("wale_user");
+      const user = userStr ? JSON.parse(userStr) : null;
+
+      if (!loggedIn || !user || role !== "student") {
+        setIsAuthenticated(false);
+        router.push("/login");
+      } else {
+        setIsAuthenticated(true);
+      }
+    }
+  }, [router]);
 
   // Fetch the student profile
   const { data: profile } = useQuery({
     queryKey: ["studentProfile"],
     queryFn: usersApi.getProfile,
+    enabled: isAuthenticated === true,
   });
 
   // Close mobile menu on pathname change
@@ -40,9 +58,27 @@ export default function StudentLayout({ children }: { children: ReactNode }) {
   }, [pathname]);
 
   const handleLogout = () => {
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("wale_is_logged_in");
+      localStorage.removeItem("wale_role");
+      localStorage.removeItem("wale_user");
+      localStorage.removeItem("wale_token");
+    }
     toast.success("Logged out successfully");
     router.push("/login");
   };
+
+  if (isAuthenticated === null) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-ink-50/50">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand-600 border-t-transparent" />
+      </div>
+    );
+  }
+
+  if (isAuthenticated === false) {
+    return null;
+  }
 
   return (
     <div className="flex min-h-screen bg-ink-50/50">
@@ -79,9 +115,9 @@ export default function StudentLayout({ children }: { children: ReactNode }) {
           <div className="border-t border-ink-150 pt-4 space-y-4">
             {profile && (
               <div className="flex items-center gap-3 px-2">
-                <Avatar name={profile.name} size="sm" />
+                <Avatar name={profile.name || (profile as any).fullName || "Student"} size="sm" />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-ink-950">{profile.name}</p>
+                  <p className="truncate text-sm font-semibold text-ink-950">{profile.name || (profile as any).fullName || "Student"}</p>
                   <p className="truncate text-xs text-ink-500 uppercase font-bold tracking-wider">
                     {profile.university} student
                   </p>
@@ -157,9 +193,9 @@ export default function StudentLayout({ children }: { children: ReactNode }) {
               <div className="border-t border-ink-150 pt-4 flex items-center justify-between">
                 {profile && (
                   <div className="flex items-center gap-3">
-                    <Avatar name={profile.name} size="sm" />
+                    <Avatar name={profile.name || (profile as any).fullName || "Student"} size="sm" />
                     <div>
-                      <p className="text-sm font-semibold text-ink-950">{profile.name}</p>
+                      <p className="text-sm font-semibold text-ink-950">{profile.name || (profile as any).fullName || "Student"}</p>
                       <p className="text-xs text-ink-500 uppercase font-bold tracking-wider">
                         {profile.university} student
                       </p>

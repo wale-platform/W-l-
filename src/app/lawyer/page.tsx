@@ -1,72 +1,155 @@
+"use client";
+
 import Link from "next/link";
-
-import {
-  Container,
-  Section,
-  SectionHeading,
-} from "@/components/layout/Container";
-
-import {
-  Button,
-  Card,
-  CardBody,
-  CardHeader,
-  CardTitle,
-  Badge,
-} from "@/components/ui";
+import { useQuery } from "@tanstack/react-query";
+import { Container, Section, SectionHeading } from "@/components/layout/Container";
+import { Button, Card, CardBody, CardHeader, CardTitle, Badge } from "@/components/ui";
+import { propertyApi } from "@/lib/api/property";
+import { Plus, Home, Clock, CheckCircle, ShieldAlert } from "lucide-react";
 
 export default function LawyerDashboardPage() {
+  // Fetch properties uploaded by the lawyer
+  const { data, isLoading } = useQuery({
+    queryKey: ["lawyerProperties"],
+    queryFn: () => propertyApi.list({ source: "lawyer" }),
+  });
+
+  const properties = data?.properties || [];
+  const totalProperties = properties.length;
+  const pendingVerification = properties.filter((p) => !p.verified).length;
+  const approvedProperties = properties.filter((p) => p.verified).length;
+
+  if (isLoading) {
+    return (
+      <main className="animate-pulse">
+        <Section>
+          <Container size="wide" className="flex flex-col gap-8">
+            <div className="h-10 w-64 bg-ink-200 rounded" />
+            <div className="grid gap-6 md:grid-cols-3">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-28 bg-ink-200 rounded-card" />
+              ))}
+            </div>
+            <div className="h-64 bg-ink-200 rounded-card" />
+          </Container>
+        </Section>
+      </main>
+    );
+  }
+
   return (
     <main>
       <Section>
         <Container size="wide" className="flex flex-col gap-8">
-          <SectionHeading
-            eyebrow="Lawyer Dashboard"
-            title="Manage your property verification work"
-            lead="Upload and manage properties on behalf of landlords and track their verification status."
-          />
-
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <SectionHeading
+              eyebrow="Lawyer Dashboard"
+              title="Manage legal verification"
+              lead="Upload and manage properties on behalf of landlords and track their verification status."
+            />
             <Link href="/lawyer/properties/upload">
-              <Button>Upload Property</Button>
-            </Link>
-
-            <Link href="/lawyer/properties">
-              <Button tone="outline">Manage Listings</Button>
+              <Button className="flex items-center gap-2">
+                <Plus className="size-4" /> Upload Property
+              </Button>
             </Link>
           </div>
 
           <div className="grid gap-6 md:grid-cols-3">
             <Card>
-              <CardHeader>
-                <CardTitle>Properties</CardTitle>
-              </CardHeader>
-              <CardBody>
-                <p className="text-sm text-ink-500">
-                  Manage properties submitted on behalf of landlords.
-                </p>
+              <CardBody className="flex items-center gap-4">
+                <div className="p-3 bg-brand-50 text-brand-700 rounded-lg">
+                  <Home className="size-6" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-ink-900">{totalProperties}</p>
+                  <p className="text-xs text-ink-500 font-medium uppercase tracking-wider">Total Submitted</p>
+                </div>
               </CardBody>
             </Card>
 
             <Card>
-              <CardHeader>
-                <CardTitle>Verification</CardTitle>
-              </CardHeader>
-              <CardBody>
-                <Badge tone="warning">Pending verification</Badge>
+              <CardBody className="flex items-center gap-4">
+                <div className="p-3 bg-amber-50 text-amber-700 rounded-lg">
+                  <Clock className="size-6" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-ink-900">{pendingVerification}</p>
+                  <p className="text-xs text-ink-500 font-medium uppercase tracking-wider">Pending Approval</p>
+                </div>
               </CardBody>
             </Card>
 
             <Card>
-              <CardHeader>
-                <CardTitle>Listings</CardTitle>
-              </CardHeader>
-              <CardBody>
-                <p className="text-sm text-ink-500">
-                  Review and edit your submitted listings.
-                </p>
+              <CardBody className="flex items-center gap-4">
+                <div className="p-3 bg-emerald-50 text-emerald-700 rounded-lg">
+                  <CheckCircle className="size-6" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-ink-900">{approvedProperties}</p>
+                  <p className="text-xs text-ink-500 font-medium uppercase tracking-wider">Approved listings</p>
+                </div>
               </CardBody>
             </Card>
+          </div>
+
+          <div className="grid gap-6 lg:grid-cols-3">
+            <div className="lg:col-span-2">
+              <Card>
+                <CardHeader className="flex justify-between items-center">
+                  <CardTitle>Properties List</CardTitle>
+                  {totalProperties > 0 && (
+                    <Link href="/lawyer/properties">
+                      <Button tone="ghost" size="sm">View all</Button>
+                    </Link>
+                  )}
+                </CardHeader>
+                <CardBody>
+                  {totalProperties === 0 ? (
+                    <div className="flex flex-col items-center gap-4 py-8 text-center">
+                      <p className="text-ink-600">No properties submitted yet.</p>
+                      <Link href="/lawyer/properties/upload">
+                        <Button tone="outline" size="sm">Upload Property</Button>
+                      </Link>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-ink-100">
+                      {properties.slice(0, 5).map((property) => (
+                        <div key={property.id} className="flex items-center justify-between py-4 first:pt-0 last:pb-0">
+                          <div>
+                            <p className="font-semibold text-ink-950">{property.title}</p>
+                            <p className="text-sm text-ink-500">{property.address}</p>
+                            <p className="text-sm font-semibold text-brand-700 mt-1">₦{property.price.toLocaleString()} / year</p>
+                          </div>
+                          <div>
+                            {property.verified ? (
+                              <Badge tone="success">Verified</Badge>
+                            ) : (
+                              <Badge tone="warning">Pending</Badge>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardBody>
+              </Card>
+            </div>
+
+            <div>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Legal Actions</CardTitle>
+                </CardHeader>
+                <CardBody className="flex flex-col gap-3">
+                  <Link href="/lawyer/properties/upload" className="w-full">
+                    <Button block className="justify-start">➕ Upload New Property</Button>
+                  </Link>
+                  <Link href="/lawyer/properties" className="w-full">
+                    <Button block tone="outline" className="justify-start">⚖️ Manage Legal Listings</Button>
+                  </Link>
+                </CardBody>
+              </Card>
+            </div>
           </div>
         </Container>
       </Section>

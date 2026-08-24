@@ -112,19 +112,19 @@ export function VerifiedBadge({
 /* -------------------------------------------------------------- Avatar -- */
 
 export function Avatar({
-  name,
+  name = "",
   src,
   size = "md",
   className,
 }: {
-  name: string;
+  name?: string;
   src?: string | null;
   size?: "sm" | "md" | "lg";
   className?: string;
 }) {
   const dims = { sm: "size-8 text-xs", md: "size-10 text-sm", lg: "size-14 text-base" };
 
-  const initials = name
+  const initials = (name || "")
     .split(" ")
     .filter(Boolean)
     .slice(0, 2)

@@ -216,7 +216,7 @@ export default function StudentProfilePage() {
               error={errors.preferredLocation?.message}
               hint="Separate multiple areas with commas"
             >
-              {(field) => <Input {...field} {...register("preferredLocation")} placeholder="e.g. Akoka, Yaba, Agbowo" />}
+              {(field) => <Input {...field} {...register("preferredLocation")} placeholder="e.g. Tanke, Oke-Odo, Malete" />}
             </FormField>
           </div>
         </div>

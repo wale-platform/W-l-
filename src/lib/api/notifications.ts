@@ -10,7 +10,7 @@ const defaultNotifications: Notification[] = [
   {
     id: "notif-001",
     title: "Inspection Approved",
-    body: "Your inspection request for 'Modern self-contained studio at Akoka' has been approved for August 25th.",
+    body: "Your inspection request for 'Modern self-contained studio at Tanke' has been approved for August 25th.",
     read: false,
     createdAt: "2026-08-18T10:05:00.000Z",
   },

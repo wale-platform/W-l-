@@ -34,9 +34,17 @@ export default function LoginPage() {
     onSuccess: (data) => {
       if (typeof window !== "undefined") {
         localStorage.setItem("wale_is_logged_in", "true");
+        localStorage.setItem("wale_role", data.user.role);
+        localStorage.setItem("wale_user", JSON.stringify(data.user));
       }
       toast.success("Welcome back!", { description: data.message });
-      router.push("/student"); // Redirect directly to student dashboard for a better MVP flow!
+      
+      const role = data.user.role;
+      if (role === "admin") router.push("/admin");
+      else if (role === "landlord") router.push("/landlord");
+      else if (role === "lawyer") router.push("/lawyer");
+      else if (role === "tenant") router.push("/tenant");
+      else router.push("/student");
     },
     onError: (error: Error) => {
       toast.error("Login failed", { description: error.message });
