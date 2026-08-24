@@ -262,10 +262,17 @@ export const propertyStatusCopy: Record<
  * "rejected"; `verified: false` collapses all three into one. `neighborhood` is
  * here rather than on the public schema because the public payload has no field
  * for it, and the edit form has to show what was saved.
+ *
+ * `statusReason` is the reviewer's own words about THIS status, and the server
+ * withholds it when the newest decision no longer explains where the listing is
+ * — so if it is absent, there is genuinely nothing to show, and the UI must not
+ * fill the gap with a guess of its own.
  */
 export const ownerPropertySchema = propertySchema.extend({
   status: propertyStatusSchema,
   neighborhood: z.string().optional(),
+  statusReason: z.string().optional(),
+  statusChangedAt: z.string().optional(),
 });
 
 export type OwnerProperty = z.infer<typeof ownerPropertySchema>;
@@ -287,6 +294,78 @@ export const myPropertiesParamsSchema = z.object({
 });
 
 export type MyPropertiesParams = z.infer<typeof myPropertiesParamsSchema>;
+
+/* ------------------------------------------------------ Review & audit -- */
+
+/**
+ * `GET /properties/review-queue` — what an admin has waiting.
+ *
+ * The same owner payload, because reviewing a listing means seeing everything
+ * its owner sees, including the last decision made on it.
+ */
+export const reviewQueueParamsSchema = z.object({
+  status: propertyStatusSchema.default("PENDING_VERIFICATION"),
+  page: z.number().int().min(1).default(1),
+  pageSize: z.number().int().min(1).max(50).default(12),
+});
+
+export type ReviewQueueParams = z.infer<typeof reviewQueueParamsSchema>;
+
+/**
+ * The decision an admin sends to `PATCH /properties/:id/status`.
+ *
+ * DRAFT is not offered: pushing someone's listing back to draft is not a
+ * moderation outcome. `reason` is required for the two punitive outcomes — the
+ * server enforces the same rule, and this copy exists so the reviewer finds out
+ * before they submit rather than after.
+ *
+ * The message says the landlord reads it word for word, because they do. A
+ * reviewer who knows that writes something the landlord can act on.
+ */
+const DECISION_NEEDS_REASON: PropertyStatus[] = ["REJECTED", "SUSPENDED"];
+
+export const propertyDecisionSchema = z
+  .object({
+    status: z.enum(["PENDING_VERIFICATION", "VERIFIED", "REJECTED", "SUSPENDED"]),
+    reason: z.string().trim().max(1000).optional(),
+  })
+  .superRefine((body, ctx) => {
+    if (DECISION_NEEDS_REASON.includes(body.status) && (body.reason ?? "").length < 10) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["reason"],
+        message:
+          body.status === "REJECTED"
+            ? "Say what the landlord needs to change — they see this word for word"
+            : "Say why it is being taken down — the landlord sees this word for word",
+      });
+    }
+  });
+
+export type PropertyDecision = z.infer<typeof propertyDecisionSchema>;
+
+/**
+ * One row of `GET /properties/:id/history` — a status change and who made it.
+ *
+ * `actor` is nullable twice over: a decision predating the audit trail has no
+ * actor on record, and deleting an admin's account nulls the link rather than
+ * erasing the decision. Either way the change itself still happened, so the UI
+ * shows it without a name rather than dropping the row.
+ */
+export const verificationEntrySchema = z.object({
+  id: z.string(),
+  fromStatus: propertyStatusSchema,
+  toStatus: propertyStatusSchema,
+  reason: z.string().nullable(),
+  actor: z.object({ id: z.string(), name: z.string() }).nullable(),
+  createdAt: z.string(),
+});
+
+export type VerificationEntry = z.infer<typeof verificationEntrySchema>;
+
+export const verificationHistoryResponseSchema = z.object({
+  history: z.array(verificationEntrySchema),
+});
 
 /* ------------------------------------------ Property, as its owner writes it -- */
 

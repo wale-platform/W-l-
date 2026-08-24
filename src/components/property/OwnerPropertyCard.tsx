@@ -1,7 +1,11 @@
-import Link from "next/link";
-import { ImageOff, Pencil, Send, Trash2 } from "lucide-react";
+"use client";
 
-import { Badge, Button, Card, CardBody } from "@/components/ui";
+import { useState } from "react";
+import Link from "next/link";
+import { History, ImageOff, Pencil, Send, Trash2 } from "lucide-react";
+
+import { VerificationHistory } from "@/components/property/VerificationHistory";
+import { Alert, Badge, Button, Card, CardBody, Modal } from "@/components/ui";
 import { propertyStatusCopy, type OwnerProperty } from "@/lib/api/schemas";
 
 /**
@@ -16,6 +20,12 @@ import { propertyStatusCopy, type OwnerProperty } from "@/lib/api/schemas";
  * Actions mirror what the backend will actually allow: only DRAFT and REJECTED
  * listings can be sent for review, and only a listing with at least one photo.
  * Offering the button anyway and letting it fail is a worse way to learn that.
+ *
+ * `statusReason` is shown verbatim when the server sends one. It is the
+ * reviewer's own words and the only thing that tells the owner what to fix, so
+ * it is never summarised — and when it is absent the card says nothing rather
+ * than guessing, because the server withholds a reason precisely when it no
+ * longer describes where the listing stands.
  */
 export function OwnerPropertyCard({
   property,
@@ -30,6 +40,7 @@ export function OwnerPropertyCard({
   onDelete: () => void;
   isSubmitting?: boolean;
 }) {
+  const [historyOpen, setHistoryOpen] = useState(false);
   const { label, tone, hint } = propertyStatusCopy[property.status];
   const canSubmit = property.status === "DRAFT" || property.status === "REJECTED";
   const hasPhotos = property.images.length > 0;
@@ -51,6 +62,21 @@ export function OwnerPropertyCard({
         </div>
 
         <p className="text-xs leading-relaxed text-ink-500">{hint}</p>
+
+        {property.statusReason && (
+          <Alert
+            tone={tone === "success" ? "success" : tone === "neutral" ? "info" : tone}
+            title={
+              property.status === "REJECTED"
+                ? "What needs to change"
+                : property.status === "SUSPENDED"
+                  ? "Why it was taken down"
+                  : "From our team"
+            }
+          >
+            {property.statusReason}
+          </Alert>
+        )}
 
         <p className="text-lg font-semibold text-ink-900">
           ₦{property.price.toLocaleString("en-NG")}
@@ -85,12 +111,27 @@ export function OwnerPropertyCard({
             </Button>
           )}
 
+          <Button size="sm" tone="ghost" onClick={() => setHistoryOpen(true)}>
+            <History aria-hidden="true" className="size-3.5" />
+            History
+          </Button>
+
           <Button tone="danger" size="sm" onClick={onDelete}>
             <Trash2 aria-hidden="true" className="size-3.5" />
             Delete
           </Button>
         </div>
       </CardBody>
+
+      <Modal
+        open={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        title="Status history"
+        description={property.title}
+      >
+        {/* Mounted only while open, so an unopened card costs no request. */}
+        {historyOpen && <VerificationHistory propertyId={property.id} />}
+      </Modal>
     </Card>
   );
 }

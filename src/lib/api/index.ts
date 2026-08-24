@@ -1,4 +1,5 @@
 export { apiClient } from "./client";
+export { adminApi } from "./admin";
 export { authApi } from "./auth";
 export { propertyApi } from "./property";
 export { contactApi } from "./contact";
