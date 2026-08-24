@@ -20,7 +20,10 @@
  *    on the right input through `fieldErrorsFrom()`,
  *  - the upload-signature endpoint hands the browser a ticket shaped the way
  *    `uploadTicketSchema` expects — or, where no Cloudinary credentials are
- *    configured, a clean 503 the form can explain.
+ *    configured, a clean 503 the form can explain,
+ *  - the sentence a reviewer types into the decision dialog is the sentence the
+ *    landlord reads on their own dashboard, unedited, having crossed a role
+ *    boundary and two schemas.
  *
  * Transport is plain fetch plus a tiny cookie jar, and the envelope-unwrap and
  * error-flatten steps mirror `src/lib/api/client.ts` exactly — otherwise the
@@ -34,6 +37,9 @@
  * ownership checks) and c (a tenant, for the role gates). To remove:
  *   cd backend && npx tsx scripts/clean-test-accounts.ts --delete
  *
+ * It also SIGNS IN as an existing admin, which it does not create and does not
+ * clean up — see ADMIN_EMAIL below.
+ *
  * That script also prints the table counts either side, which is how a run is
  * shown to have left the shared database where it found it.
  */
@@ -43,11 +49,13 @@ import {
   apiErrorSchema,
   ownerPropertyListResponseSchema,
   ownerPropertySchema,
+  propertyDecisionSchema,
   propertyFormSchema,
   propertyFormValuesFrom,
   propertyListResponseSchema,
   propertySortOptions,
   uploadTicketSchema,
+  verificationHistoryResponseSchema,
   type PropertyFormValues,
 } from "../src/lib/api/schemas";
 import { fieldErrorsFrom, messageFrom, statusOf } from "../src/lib/api/field-errors";
@@ -55,8 +63,22 @@ import { universities } from "../src/config/site";
 
 const BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000/api/v1";
 
+/**
+ * An existing admin, because one cannot be registered.
+ *
+ * `POST /auth/register` deliberately refuses ADMIN, so unlike the landlord and
+ * tenant accounts this one cannot be created on the fly — it has to already
+ * exist. The default is the seeded development admin; override both for a
+ * database seeded differently. If the sign-in fails the review-queue section is
+ * SKIPPED and said to be skipped, rather than counted as a contract failure it
+ * is not.
+ */
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? "admin@wale.test";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? "AdminDev123!";
+
 let passed = 0;
 let failed = 0;
+let skipped = 0;
 
 function check(name: string, ok: boolean, detail = "") {
   if (ok) {
@@ -819,7 +841,262 @@ if (!propertyId) {
   }
 }
 
-// 12. Clean up after ourselves.
+// 12. The review queue, and a decision a landlord can read.
+//
+// The one claim worth checking live rather than in a unit test: the sentence a
+// reviewer types into the dialog is the sentence the landlord sees on their own
+// dashboard, unedited, having crossed a role boundary and two schemas.
+{
+  const admin = new Session();
+  const login = await admin.call("POST", "/auth/login", {
+    email: ADMIN_EMAIL,
+    password: ADMIN_PASSWORD,
+  });
+
+  if (login.status !== 200) {
+    skipped++;
+    console.log(
+      `  SKIP  the review queue — could not sign in as ${ADMIN_EMAIL} (got ${login.status}).`,
+    );
+    console.log("        Seed the shared database, or pass ADMIN_EMAIL / ADMIN_PASSWORD.");
+  } else {
+    check("the admin account signs in", true);
+
+    // The role gate, before anything is decided with it.
+    const anon = await new Session().call("GET", "/properties/review-queue");
+    check("GET /properties/review-queue needs a session", anon.status === 401, `got ${anon.status}`);
+
+    const asLandlord = await owner.call("GET", "/properties/review-queue");
+    check("a landlord cannot read the review queue", asLandlord.status === 403, `got ${asLandlord.status}`);
+
+    // Put our own listing in the queue. It is a DRAFT with two photos at this
+    // point (section 8 edited it), so it is submittable.
+    const submitted = await owner.call("POST", `/properties/${propertyId}/submit`);
+    check(
+      "the owner can submit the listing for review",
+      submitted.status === 200 &&
+        ownerPropertySchema.safeParse(submitted.data).data?.status === "PENDING_VERIFICATION",
+      `got ${submitted.status} ${messageFrom(submitted.error, "").slice(0, 120)}`,
+    );
+
+    const queue = await admin.call("GET", "/properties/review-queue?page=1&pageSize=50");
+    const parsedQueue = ownerPropertyListResponseSchema.safeParse(queue.data);
+    check("GET /properties/review-queue returns 200 for an admin", queue.status === 200, `got ${queue.status}`);
+    check(
+      "the queue parses with ownerPropertyListResponseSchema",
+      parsedQueue.success,
+      parsedQueue.success ? "" : JSON.stringify(parsedQueue.error.issues).slice(0, 300),
+    );
+    if (parsedQueue.success) {
+      check(
+        "the submitted listing is in the queue",
+        parsedQueue.data.properties.some((p) => p.id === propertyId),
+        `${parsedQueue.data.total} waiting`,
+      );
+      check(
+        "everything in the default queue is awaiting a decision",
+        parsedQueue.data.properties.every((p) => p.status === "PENDING_VERIFICATION"),
+        JSON.stringify([...new Set(parsedQueue.data.properties.map((p) => p.status))]),
+      );
+    }
+
+    // A rejection with nothing written in it is refused, and the complaint lands
+    // on the textarea rather than arriving as a banner with no field attached.
+    const bare = await admin.call("PATCH", `/properties/${propertyId}/status`, {
+      status: "REJECTED",
+    });
+    check("a rejection with no reason is refused", bare.status === 422, `got ${bare.status}`);
+    check(
+      "fieldErrorsFrom() puts that complaint on the reason field",
+      fieldErrorsFrom(bare.error).some((f) => f.field === "reason"),
+      JSON.stringify(fieldErrorsFrom(bare.error)),
+    );
+
+    // The frontend's copy of the same rule. The server is what enforces it; this
+    // is only the claim that the dialog refuses first, so a reviewer learns
+    // before submitting rather than after.
+    check(
+      "propertyDecisionSchema refuses the same body client-side",
+      !propertyDecisionSchema.safeParse({ status: "REJECTED" }).success,
+    );
+    check(
+      "propertyDecisionSchema accepts an approval with no reason",
+      propertyDecisionSchema.safeParse({ status: "VERIFIED" }).success,
+    );
+
+    const REASON =
+      "The second photograph is of a different building. Replace it with the actual flat and resubmit.";
+    const decision = propertyDecisionSchema.safeParse({ status: "REJECTED", reason: REASON });
+    check("the dialog's own payload parses", decision.success);
+
+    const rejected = await admin.call(
+      "PATCH",
+      `/properties/${propertyId}/status`,
+      decision.success ? decision.data : {},
+    );
+    check("PATCH /properties/:id/status returns 200 for an admin", rejected.status === 200, `got ${rejected.status}`);
+
+    const parsedRejected = ownerPropertySchema.safeParse(rejected.data);
+    check(
+      "the decided listing parses with ownerPropertySchema",
+      parsedRejected.success,
+      parsedRejected.success ? "" : JSON.stringify(parsedRejected.error.issues).slice(0, 300),
+    );
+    if (parsedRejected.success) {
+      check("it is now REJECTED", parsedRejected.data.status === "REJECTED", parsedRejected.data.status);
+      check(
+        "the reason comes back word for word",
+        parsedRejected.data.statusReason === REASON,
+        String(parsedRejected.data.statusReason),
+      );
+      check(
+        "statusChangedAt is a date the card can format",
+        Boolean(parsedRejected.data.statusChangedAt) &&
+          !Number.isNaN(Date.parse(parsedRejected.data.statusChangedAt ?? "")),
+        String(parsedRejected.data.statusChangedAt),
+      );
+    }
+
+    // The point of the whole feature: the landlord reads it on their own page.
+    const asOwner = await owner.call("GET", `/properties/mine/${propertyId}`);
+    const ownerView = ownerPropertySchema.safeParse(asOwner.data);
+    check(
+      "the landlord sees that exact sentence on their own dashboard",
+      ownerView.success && ownerView.data.statusReason === REASON,
+      ownerView.success ? String(ownerView.data.statusReason) : `got ${asOwner.status}`,
+    );
+
+    // The same decision twice is a conflict, which is why the card hides the
+    // button for the state a listing is already in.
+    const again = await admin.call("PATCH", `/properties/${propertyId}/status`, {
+      status: "REJECTED",
+      reason: REASON,
+    });
+    check("deciding the same status twice is a conflict", again.status === 409, `got ${again.status}`);
+
+    // A landlord cannot decide their own listing, with or without the queue.
+    const selfApprove = await owner.call("PATCH", `/properties/${propertyId}/status`, {
+      status: "VERIFIED",
+    });
+    check("a landlord cannot approve their own listing", selfApprove.status === 403, `got ${selfApprove.status}`);
+
+    /* ------------------------------------------------------------- history -- */
+
+    const history = await admin.call("GET", `/properties/${propertyId}/history`);
+    const parsedHistory = verificationHistoryResponseSchema.safeParse(history.data);
+    check("GET /properties/:id/history returns 200 for an admin", history.status === 200, `got ${history.status}`);
+    check(
+      "the history parses with verificationHistoryResponseSchema",
+      parsedHistory.success,
+      parsedHistory.success ? "" : JSON.stringify(parsedHistory.error.issues).slice(0, 300),
+    );
+
+    if (parsedHistory.success) {
+      const rows = parsedHistory.data.history;
+      check("both transitions were recorded", rows.length >= 2, `${rows.length} rows`);
+
+      const dates = rows.map((row) => Date.parse(row.createdAt));
+      check(
+        "the history is newest first",
+        dates.every((date, i) => i === 0 || dates[i - 1] >= date),
+        JSON.stringify(rows.map((r) => r.createdAt)),
+      );
+      check(
+        "the newest row is the rejection, with the reason attached",
+        rows[0]?.toStatus === "REJECTED" && rows[0]?.reason === REASON,
+        JSON.stringify(rows[0]),
+      );
+      check(
+        "the reviewer is named on their own decision",
+        Boolean(rows[0]?.actor?.name),
+        JSON.stringify(rows[0]?.actor),
+      );
+      check(
+        "the owner's submission was recorded too, with no invented reason",
+        rows.some((row) => row.toStatus === "PENDING_VERIFICATION" && row.reason === null),
+        JSON.stringify(rows.map((r) => [r.toStatus, r.reason])),
+      );
+      // The reviewer's identity is a name, not a mailbox. This screen is shown to
+      // the landlord who is being told no.
+      check(
+        "no email address appears anywhere in the history payload",
+        !/@/.test(JSON.stringify(rows.map((r) => r.actor))),
+        JSON.stringify(rows.map((r) => r.actor)),
+      );
+    }
+
+    const ownHistory = await owner.call("GET", `/properties/${propertyId}/history`);
+    check(
+      "the owner can read the history of their own listing",
+      ownHistory.status === 200 &&
+        verificationHistoryResponseSchema.safeParse(ownHistory.data).success,
+      `got ${ownHistory.status}`,
+    );
+
+    const nosy = await stranger.call("GET", `/properties/${propertyId}/history`);
+    check(
+      "a stranger's history request is 404, not 403",
+      nosy.status === 404,
+      `got ${nosy.status}`,
+    );
+
+    /* ------------------------------------------- the loop closes: approval -- */
+
+    const resubmit = await owner.call("POST", `/properties/${propertyId}/submit`);
+    check(
+      "a rejected listing can be fixed and resubmitted",
+      resubmit.status === 200,
+      `got ${resubmit.status} ${messageFrom(resubmit.error, "").slice(0, 120)}`,
+    );
+
+    const approved = await admin.call("PATCH", `/properties/${propertyId}/status`, {
+      status: "VERIFIED",
+    });
+    const parsedApproved = ownerPropertySchema.safeParse(approved.data);
+    check("an approval needs no reason", approved.status === 200, `got ${approved.status}`);
+    if (parsedApproved.success) {
+      check("it is VERIFIED", parsedApproved.data.status === "VERIFIED", parsedApproved.data.status);
+      check("verified is now true", parsedApproved.data.verified === true);
+      check(
+        "the stale rejection reason is gone",
+        parsedApproved.data.statusReason === null || parsedApproved.data.statusReason === undefined,
+        String(parsedApproved.data.statusReason),
+      );
+    }
+
+    // What a visitor sees, which is the only reason any of this happened.
+    const publicList = await owner.call("GET", "/properties?verifiedOnly=true&pageSize=50");
+    const publicParsed = propertyListResponseSchema.safeParse(publicList.data);
+    check(
+      "the approved listing is now in the verified catalogue",
+      publicParsed.success && publicParsed.data.properties.some((p) => p.id === propertyId),
+    );
+
+    // Editing a verified listing sends it back for review, and the audit trail
+    // says why — otherwise a reviewer cannot tell it from a fresh submission.
+    const edited = await owner.call("PATCH", `/properties/${propertyId}`, {
+      price: 1_400_000,
+    });
+    const parsedEdited = ownerPropertySchema.safeParse(edited.data);
+    check(
+      "editing a verified listing sends it back to the queue",
+      parsedEdited.success && parsedEdited.data.status === "PENDING_VERIFICATION",
+      parsedEdited.success ? parsedEdited.data.status : `got ${edited.status}`,
+    );
+
+    const afterEdit = await admin.call("GET", `/properties/${propertyId}/history`);
+    const editHistory = verificationHistoryResponseSchema.safeParse(afterEdit.data);
+    check(
+      "the demotion is recorded with a reason a reviewer can act on",
+      editHistory.success &&
+        editHistory.data.history[0]?.fromStatus === "VERIFIED" &&
+        /edited/i.test(editHistory.data.history[0]?.reason ?? ""),
+      editHistory.success ? JSON.stringify(editHistory.data.history[0]) : "history did not parse",
+    );
+  }
+}
+
+// 13. Clean up after ourselves.
 {
   const r = await owner.call("DELETE", `/properties/${propertyId}`);
   check("DELETE /properties/:id removes the listing", r.status === 200 || r.status === 204, `got ${r.status}`);
@@ -828,7 +1105,7 @@ if (!propertyId) {
   check("it is gone afterwards", after.status === 404, `got ${after.status}`);
 }
 
-console.log(`\n${passed} passed, ${failed} failed`);
+console.log(`\n${passed} passed, ${failed} failed${skipped ? `, ${skipped} skipped` : ""}`);
 console.log(`Left behind: ${emailA}, ${emailB}, propcheck+${stamp}c@wale.test`);
 console.log(`Clean up with: cd backend && npx tsx scripts/clean-test-accounts.ts --delete`);
 process.exit(failed === 0 ? 0 : 1);
