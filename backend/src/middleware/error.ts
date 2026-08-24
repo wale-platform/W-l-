@@ -34,11 +34,27 @@ function zodDetails(err: ZodError): ErrorDetail[] {
  * filesystem paths and a source excerpt of the failing call. That is useful in a
  * terminal and unacceptable on the wire, so we keep the first line only and drop
  * anything that looks like a path.
+ *
+ * Their message also OPENS with a newline, so "first line" alone yields nothing
+ * but the class name — `PrismaClientKnownRequestError:` and no hint of what went
+ * wrong, which sends whoever is debugging to the log to learn anything at all.
+ * Where a code is available it is appended, since for Prisma the code (P2028,
+ * P2002) is the diagnosis.
  */
 function devSummary(err: unknown): string {
-  const raw = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
-  const firstLine = raw.split("\n").find((l) => l.trim().length > 0) ?? "Unknown error";
-  return firstLine.replace(/([A-Za-z]:)?[\\/][^\s'"]+/g, "<path>").slice(0, 300);
+  const lines = (err instanceof Error ? `${err.name}: ${err.message}` : String(err))
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  // Prefer the first line that says something beyond the error's own class name.
+  const head = lines[0] ?? "Unknown error";
+  const summary = /:$/.test(head) && lines[1] ? `${head} ${lines[1]}` : head;
+
+  const code = (err as { code?: unknown })?.code;
+  const suffix = typeof code === "string" && !summary.includes(code) ? ` [${code}]` : "";
+
+  return `${summary.replace(/([A-Za-z]:)?[\\/][^\s'"]+/g, "<path>")}${suffix}`.slice(0, 300);
 }
 
  
