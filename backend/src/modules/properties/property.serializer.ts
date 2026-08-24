@@ -93,16 +93,45 @@ export function toSerializedProperty(p: PropertyWithImages): SerializedProperty 
  * `neighborhood`, because it is writable and the public payload has no field for
  * it. Without it the edit form could not show what was saved, and an area the
  * owner typed once would be invisible to them forever.
+ *
+ * `statusReason` / `statusChangedAt`, because "Rejected" on its own is a dead
+ * end. They come from the newest audit row (see PropertyVerification) and only
+ * when that row is the one that produced the CURRENT status — otherwise a
+ * landlord who fixed the problem and resubmitted would still be staring at the
+ * old complaint while the listing sits in the queue.
  */
 export type OwnerProperty = SerializedProperty & {
   status: Property["status"];
   neighborhood?: string;
+  statusReason?: string;
+  statusChangedAt?: string;
 };
 
-export function toOwnerProperty(p: PropertyWithImages): OwnerProperty {
+/**
+ * The newest audit row, when the caller has included one.
+ *
+ * Prisma's `include: { verifications: { take: 1 } }` yields an array, so this is
+ * shaped to accept that directly rather than making every call site unwrap it.
+ */
+export type LatestDecision = {
+  toStatus: Property["status"];
+  reason: string | null;
+  createdAt: Date;
+};
+
+export function toOwnerProperty(
+  p: PropertyWithImages & { verifications?: LatestDecision[] },
+): OwnerProperty {
+  const latest = p.verifications?.[0];
+  // Only when it explains the status the listing is in right now. A stale reason
+  // is worse than none: it describes a problem that may already be fixed.
+  const explains = latest !== undefined && latest.toStatus === p.status;
+
   return {
     ...toSerializedProperty(p),
     status: p.status,
     ...(p.neighborhood ? { neighborhood: p.neighborhood } : {}),
+    ...(explains && latest.reason ? { statusReason: latest.reason } : {}),
+    ...(explains ? { statusChangedAt: latest.createdAt.toISOString() } : {}),
   };
 }

@@ -114,3 +114,14 @@ export const isDev = env.NODE_ENV === "development";
 export const corsOrigins = env.FRONTEND_URL.split(",")
   .map((o) => o.trim())
   .filter(Boolean);
+
+/**
+ * Where to point a link we put in an email.
+ *
+ * The first allowed origin, because when several are configured the rest are
+ * usually a preview deployment or a LAN address for phone testing — a verify
+ * link is only useful on the canonical one. The literal fallback keeps a link
+ * from rendering as `undefined/verify-email` if FRONTEND_URL is somehow empty.
+ */
+export const frontendBaseUrl = corsOrigins[0] ?? "http://localhost:3000";
+

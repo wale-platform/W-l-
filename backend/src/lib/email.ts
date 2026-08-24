@@ -82,3 +82,74 @@ export function sendPasswordResetEmail(to: string, resetUrl: string): Promise<vo
   ].join("\n");
   return sendMail({ to, subject, text });
 }
+
+/**
+ * Tell a landlord what happened to their listing.
+ *
+ * Sent on every admin decision, because a review the owner never hears about is
+ * indistinguishable from no review at all — they would keep refreshing a
+ * dashboard to find out.
+ *
+ * `reason` is the reviewer's own words, passed through unchanged. For a rejection
+ * it is the only thing that tells them what to fix, so it is not summarised, and
+ * it is why the schema requires one.
+ */
+export function sendListingDecisionEmail(args: {
+  to: string;
+  title: string;
+  status: "PENDING_VERIFICATION" | "VERIFIED" | "REJECTED" | "SUSPENDED";
+  reason?: string;
+  listingUrl: string;
+}): Promise<void> {
+  const { to, title, status, reason, listingUrl } = args;
+
+  const copy = {
+    VERIFIED: {
+      subject: `Your listing is live: ${title}`,
+      lead: [
+        `Good news — "${title}" has been verified and is now live on Wale Housing.`,
+        "",
+        "Students can find it in search, and it carries the verified badge.",
+      ],
+    },
+    REJECTED: {
+      subject: `Your listing needs a change: ${title}`,
+      lead: [
+        `We reviewed "${title}" and it can't go live as it stands.`,
+        "",
+        "What our reviewer said:",
+      ],
+    },
+    SUSPENDED: {
+      subject: `Your listing has been taken down: ${title}`,
+      lead: [
+        `"${title}" has been taken down and is no longer visible to students.`,
+        "",
+        "Why:",
+      ],
+    },
+    PENDING_VERIFICATION: {
+      subject: `Your listing is back under review: ${title}`,
+      lead: [`"${title}" has been put back into the review queue.`],
+    },
+  }[status];
+
+  const text = [
+    ...copy.lead,
+    ...(reason ? ["", reason] : []),
+    "",
+    status === "REJECTED"
+      ? "Update it and send it back for review here:"
+      : "See the listing here:",
+    listingUrl,
+    "",
+    status === "SUSPENDED"
+      ? "If you think this is a mistake, reply to this email and we'll take another look."
+      : "",
+  ]
+    .filter((line, i, all) => !(line === "" && all[i - 1] === ""))
+    .join("\n")
+    .trimEnd();
+
+  return sendMail({ to, subject: copy.subject, text });
+}

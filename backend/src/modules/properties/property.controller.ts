@@ -6,6 +6,7 @@ import type {
   ListMyPropertiesQuery,
   ListPropertiesQuery,
   PropertyStatusInput,
+  ReviewQueueQuery,
 } from "./property.schemas";
 import * as propertyService from "./property.service";
 
@@ -79,7 +80,24 @@ export async function submit(req: Request, res: Response): Promise<void> {
 }
 
 export async function setStatus(req: Request, res: Response): Promise<void> {
-  const { status } = req.body as PropertyStatusInput;
-  const property = await propertyService.setPropertyStatus(req.params.id as string, status);
+  const property = await propertyService.setPropertyStatus(
+    actor(req),
+    req.params.id as string,
+    req.body as PropertyStatusInput,
+  );
   sendSuccess(res, property);
+}
+
+export async function reviewQueue(req: Request, res: Response): Promise<void> {
+  const query = req.validatedQuery as ReviewQueueQuery;
+  const result = await propertyService.listReviewQueue(query);
+  sendSuccess(res, result);
+}
+
+export async function history(req: Request, res: Response): Promise<void> {
+  const entries = await propertyService.getVerificationHistory(
+    actor(req),
+    req.params.id as string,
+  );
+  sendSuccess(res, { history: entries });
 }

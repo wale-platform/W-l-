@@ -10,6 +10,7 @@ import {
   listPropertiesQuerySchema,
   propertyIdParamSchema,
   propertyStatusSchema,
+  reviewQueueQuerySchema,
   updatePropertySchema,
 } from "./property.schemas";
 
@@ -26,8 +27,9 @@ import {
  * "upload apartment" flow is a move-out notice, not a listing, and belongs to
  * the mover domain.
  *
- * ROUTE ORDER MATTERS. `/mine` is declared before `/:id`, or Express would read
- * "mine" as a property id and every owner request would 404.
+ * ROUTE ORDER MATTERS. `/mine` and `/review-queue` are declared before `/:id`,
+ * or Express would read them as property ids and every owner or admin request
+ * would 404.
  */
 export const propertyRouter = Router();
 
@@ -53,6 +55,27 @@ propertyRouter.get(
   requireAuth,
   validateParams(propertyIdParamSchema),
   asyncHandler(propertyController.getMineById),
+);
+
+/* --------------------------------------------------------------- review -- */
+
+// What is waiting to be decided. Admin only, and separate from `/mine`, which
+// stays scoped to the caller even for an admin.
+propertyRouter.get(
+  "/review-queue",
+  requireAuth,
+  requireRole("ADMIN"),
+  validateQuery(reviewQueueQuerySchema),
+  asyncHandler(propertyController.reviewQueue),
+);
+
+// Status history for one listing. Readable by an admin and by the listing's own
+// owner; the service decides which, and a stranger gets 404.
+propertyRouter.get(
+  "/:id/history",
+  requireAuth,
+  validateParams(propertyIdParamSchema),
+  asyncHandler(propertyController.history),
 );
 
 /* ---------------------------------------------------------------- writes -- */

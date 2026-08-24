@@ -70,6 +70,7 @@ model User {
   properties              Property[]
   roles                   UserRole[]
   grantedRoles            UserRole[] @relation("RoleGrantedBy")
+  verificationDecisions   PropertyVerification[]
 
   @@index([role])
   @@index([status])
@@ -216,6 +217,7 @@ model Property {
 
   owner  User?           @relation(fields: [ownerId], references: [id], onDelete: SetNull)
   images PropertyImage[]
+  verifications PropertyVerification[]
 
   @@index([status])
   @@index([university])
@@ -240,7 +242,52 @@ model PropertyImage {
   @@index([propertyId])
 }
 
-// Deferred domains (messaging, notifications, verification workflow, wallet,
-// bookings, media assets) are intentionally NOT modelled yet — they are added
-// in their own phases to avoid speculative, unused tables. The relations above
-// are shaped so they can be introduced additively.
+// ──────────────────────────────────────────── Verification (audit trail) ──
+
+// Every change a listing's status has ever gone through, one row each.
+//
+// Append-only. Nothing updates or deletes a row, because the point of the table
+// is to answer "who decided this, when, and what did they say" months later —
+// including when the answer is inconvenient. Three readers:
+//
+//  - the landlord, who is shown the reason their listing was rejected or
+//    suspended. Without this, "Rejected" is a dead end: they cannot tell whether
+//    to change a photo or a price, and support has to guess too.
+//  - an admin looking at a listing that has been round the loop several times.
+//  - us, when a landlord disputes a decision.
+//
+// `reason` is required by the service for REJECTED and SUSPENDED (see
+// property.schemas.ts) and optional otherwise: approving needs no explanation,
+// taking somebody's listing down does.
+//
+// Cascade on delete. The trail describes a listing, and once the listing is gone
+// there is no reader left for its history — an orphan row would be kept out of
+// principle rather than for a purpose. Note what that does NOT cover: a landlord
+// who is rejected, deletes, and re-lists the same flat to get a fresh reviewer.
+// Catching that needs address matching, not a retained row, and it is not
+// attempted here.
+model PropertyVerification {
+  id         String         @id @default(cuid())
+  propertyId String
+  fromStatus PropertyStatus
+  toStatus   PropertyStatus
+  // What the owner is shown. Never an internal note — assume they will read it.
+  reason     String?
+  // Who acted. Null when the actor's account is later deleted; the row survives
+  // because what was decided matters even when who decided it is gone.
+  actorId    String?
+  createdAt  DateTime       @default(now())
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  actor    User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  // The owner's "why was this rejected" query: newest row for one listing.
+  @@index([propertyId, createdAt])
+  // The admin queue's counterpart: recent decisions across all listings.
+  @@index([createdAt])
+}
+
+// Deferred domains (messaging, notifications, wallet, bookings, media assets)
+// are intentionally NOT modelled yet — they are added in their own phases to
+// avoid speculative, unused tables. The relations above are shaped so they can
+// be introduced additively.

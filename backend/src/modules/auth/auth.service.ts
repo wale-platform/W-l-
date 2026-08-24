@@ -1,6 +1,6 @@
 import type { Role, User } from "@prisma/client";
 
-import { corsOrigins } from "../../config/env";
+import { frontendBaseUrl } from "../../config/env";
 import { hashPassword, verifyPassword } from "../../lib/crypto";
 import {
   sendPasswordResetEmail,
@@ -34,8 +34,6 @@ export type AuthResult = {
   rawToken: string;
   expiresAt: Date;
 };
-
-const frontendBaseUrl = corsOrigins[0] ?? "http://localhost:3000";
 
 // A constant, valid hash used to equalize verify timing when an account does
 // not exist, so login can't be used to enumerate registered emails by timing.

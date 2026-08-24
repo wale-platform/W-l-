@@ -218,14 +218,58 @@ export type ListMyPropertiesQuery = z.infer<typeof listMyPropertiesQuerySchema>;
  *
  * DRAFT is not offered: pushing someone's listing back to draft is not a
  * moderation outcome, and PENDING_VERIFICATION covers "look at this again".
+ *
+ * `reason` is REQUIRED for REJECTED and SUSPENDED and optional otherwise, and it
+ * is written to the audit trail and shown to the landlord verbatim. Rejecting
+ * without saying why leaves them with a dead end — they cannot tell whether to
+ * change a photo, a price or an address, and support ends up guessing on their
+ * behalf. Approving needs no explanation; taking somebody's listing down does.
+ *
+ * The 10-character floor is there because "no" and "bad" are not reasons. It is
+ * a weak check and it is meant to be: the real safeguard is that the landlord
+ * reads what the reviewer wrote.
  */
-export const propertyStatusSchema = z.object({
-  status: z.enum([
-    PropertyStatus.PENDING_VERIFICATION,
-    PropertyStatus.VERIFIED,
-    PropertyStatus.REJECTED,
-    PropertyStatus.SUSPENDED,
-  ]),
-});
+const DECISION_NEEDS_REASON: PropertyStatus[] = [
+  PropertyStatus.REJECTED,
+  PropertyStatus.SUSPENDED,
+];
+
+export const propertyStatusSchema = z
+  .object({
+    status: z.enum([
+      PropertyStatus.PENDING_VERIFICATION,
+      PropertyStatus.VERIFIED,
+      PropertyStatus.REJECTED,
+      PropertyStatus.SUSPENDED,
+    ]),
+    reason: z.string().trim().min(1).max(1000).optional(),
+  })
+  .superRefine((body, ctx) => {
+    if (DECISION_NEEDS_REASON.includes(body.status) && (body.reason ?? "").length < 10) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["reason"],
+        message:
+          body.status === PropertyStatus.REJECTED
+            ? "Say what the landlord needs to change — they see this word for word"
+            : "Say why it is being taken down — the landlord sees this word for word",
+      });
+    }
+  });
 
 export type PropertyStatusInput = z.infer<typeof propertyStatusSchema>;
+
+/**
+ * Query for the admin review queue.
+ *
+ * `status` defaults to PENDING_VERIFICATION, which is the whole point of the
+ * queue, but stays settable so an admin can go back over what they rejected or
+ * suspended — a decision nobody can revisit is a decision nobody can correct.
+ */
+export const reviewQueueQuerySchema = z.object({
+  status: z.nativeEnum(PropertyStatus).default(PropertyStatus.PENDING_VERIFICATION),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(50).default(12),
+});
+
+export type ReviewQueueQuery = z.infer<typeof reviewQueueQuerySchema>;

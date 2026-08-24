@@ -3,6 +3,7 @@ import type {
   PasswordResetToken,
   Property,
   PropertyImage,
+  PropertyVerification,
   Session,
 } from "@prisma/client";
 
@@ -153,5 +154,28 @@ export function makeProperty(
       },
     ],
     ...rest,
+  };
+}
+
+/**
+ * An audit row: by default the rejection an owner is meant to read.
+ *
+ * `toStatus` has to match the property's own `status` for `toOwnerProperty` to
+ * surface the reason at all — a row describing a status the listing has since
+ * moved past is deliberately dropped — so a test that expects `statusReason` in
+ * the response must keep the two in step.
+ */
+export function makeVerification(
+  overrides: Partial<PropertyVerification> = {},
+): PropertyVerification {
+  return {
+    id: "pver_test_1",
+    propertyId: "prop_test_1",
+    fromStatus: "PENDING_VERIFICATION",
+    toStatus: "REJECTED",
+    reason: "The second photo is of a different building. Replace it and resubmit.",
+    actorId: "usr_admin",
+    createdAt: new Date("2026-02-01T00:00:00.000Z"),
+    ...overrides,
   };
 }

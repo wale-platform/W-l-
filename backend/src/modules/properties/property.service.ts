@@ -1,7 +1,10 @@
 import { Prisma, PropertySource, PropertyStatus, type Role } from "@prisma/client";
 
+import { frontendBaseUrl } from "../../config/env";
 import { ConflictError, NotFoundError, ValidationError } from "../../lib/errors";
 import { prisma } from "../../lib/prisma";
+import { sendListingDecisionEmail } from "../../lib/email";
+import { logger } from "../../lib/logger";
 import { fullName } from "../users/user.serializer";
 import { deriveAmenityTags } from "./amenity-tags";
 import {
@@ -14,6 +17,8 @@ import type {
   CreatePropertyInput,
   ListMyPropertiesQuery,
   ListPropertiesQuery,
+  PropertyStatusInput,
+  ReviewQueueQuery,
   UpdatePropertyInput,
 } from "./property.schemas";
 
@@ -39,6 +44,15 @@ const PUBLICLY_LISTABLE: PropertyStatus[] = [
 
 /** A listing can be (re)submitted for review from these states only. */
 const SUBMITTABLE: PropertyStatus[] = [PropertyStatus.DRAFT, PropertyStatus.REJECTED];
+
+/**
+ * The newest audit row, for the owner-facing payload.
+ *
+ * Every read that returns an `OwnerProperty` includes this, because the reason a
+ * listing was rejected travels with the listing — `toOwnerProperty` drops it
+ * again unless the row explains the status the listing is in right now.
+ */
+const LATEST_DECISION = { orderBy: { createdAt: "desc" }, take: 1 } as const;
 
 export type PropertyListResult = {
   properties: SerializedProperty[];
@@ -209,7 +223,7 @@ export async function listOwnedProperties(
   const [rows, total] = await Promise.all([
     prisma.property.findMany({
       where,
-      include: { images: true },
+      include: { images: true, verifications: LATEST_DECISION },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       skip,
       take: q.pageSize,
@@ -227,7 +241,7 @@ export async function listOwnedProperties(
 export async function getOwnedProperty(actor: Actor, id: string): Promise<OwnerProperty> {
   const property = await prisma.property.findFirst({
     where: ownedBy(actor, id),
-    include: { images: true },
+    include: { images: true, verifications: LATEST_DECISION },
   });
   if (!property) throw new NotFoundError("Property not found");
   return toOwnerProperty(property);
@@ -338,6 +352,12 @@ export async function createProperty(
  * verified listing — get a modest flat approved, then rewrite the price and
  * address while keeping the verified badge. The badge has to describe the
  * listing as it currently reads, not as it read when someone last checked.
+ *
+ * That demotion gets an audit row like any other status change, with a reason
+ * saying what caused it. Otherwise the owner sees a verified listing turn amber
+ * with no explanation, and an admin picking it out of the queue cannot tell a
+ * fresh submission from a listing that was approved and then rewritten — which
+ * is exactly the case worth a second look.
  */
 export async function updateProperty(
   actor: Actor,
@@ -361,7 +381,8 @@ export async function updateProperty(
     data.amenityTags = deriveAmenityTags(fields.amenities);
   }
 
-  if (existing.status === PropertyStatus.VERIFIED) {
+  const demoted = existing.status === PropertyStatus.VERIFIED;
+  if (demoted) {
     data.status = PropertyStatus.PENDING_VERIFICATION;
   }
 
@@ -376,10 +397,21 @@ export async function updateProperty(
         });
       }
     }
+    if (demoted) {
+      await tx.propertyVerification.create({
+        data: {
+          propertyId: existing.id,
+          fromStatus: PropertyStatus.VERIFIED,
+          toStatus: PropertyStatus.PENDING_VERIFICATION,
+          reason: "Edited after it was verified, so it goes back through review.",
+          actorId: actor.id,
+        },
+      });
+    }
     return tx.property.update({
       where: { id: existing.id },
       data,
-      include: { images: true },
+      include: { images: true, verifications: LATEST_DECISION },
     });
   });
 
@@ -408,6 +440,11 @@ export async function deleteProperty(actor: Actor, id: string): Promise<void> {
  * Requires at least one photo. A listing with no images cannot be reviewed in
  * any meaningful sense, and PENDING_VERIFICATION is publicly visible, so an
  * empty one would go straight into the catalogue as a blank card.
+ *
+ * Recorded in the audit trail like an admin decision, with the owner as the
+ * actor. A trail holding only the admin half would read as if listings arrived
+ * in the queue by themselves, and a resubmission after a rejection is precisely
+ * the event a reviewer wants dated: it says the landlord has responded.
  */
 export async function submitForVerification(actor: Actor, id: string): Promise<OwnerProperty> {
   const existing = await prisma.property.findFirst({
@@ -433,10 +470,24 @@ export async function submitForVerification(actor: Actor, id: string): Promise<O
     ]);
   }
 
-  const updated = await prisma.property.update({
-    where: { id: existing.id },
-    data: { status: PropertyStatus.PENDING_VERIFICATION },
-    include: { images: true },
+  const updated = await prisma.$transaction(async (tx) => {
+    await tx.propertyVerification.create({
+      data: {
+        propertyId: existing.id,
+        fromStatus: existing.status,
+        toStatus: PropertyStatus.PENDING_VERIFICATION,
+        // No reason: the owner is not explaining themselves to anyone, and an
+        // invented one ("Submitted by the owner") would show up on their own
+        // dashboard as though somebody had written it to them.
+        reason: null,
+        actorId: actor.id,
+      },
+    });
+    return tx.property.update({
+      where: { id: existing.id },
+      data: { status: PropertyStatus.PENDING_VERIFICATION },
+      include: { images: true, verifications: LATEST_DECISION },
+    });
   });
   return toOwnerProperty(updated);
 }
@@ -444,24 +495,190 @@ export async function submitForVerification(actor: Actor, id: string): Promise<O
 /**
  * Admin decision on a listing's status.
  *
- * Separate from `updateProperty` on purpose: this is the ONE path that can put
- * a listing into VERIFIED, and it is reachable only behind
- * `requireRole("ADMIN")`. The richer verification workflow — a reason the owner
- * can read, an audit trail of who decided what, a notification — is still to
- * come; this closes the state machine so an edited listing can get its badge
- * back.
+ * The ONE path that can put a listing into VERIFIED, reachable only behind
+ * `requireRole("ADMIN")`.
+ *
+ * Three things happen together, in one transaction: the status changes, the
+ * decision is written to the audit trail, and — outside the transaction, because
+ * a mail server hiccup must not roll back a decision — the owner is emailed.
+ * The audit row is not optional bookkeeping: it carries the reason the landlord
+ * is shown, so a rejection with no row would surface to them as a bare
+ * "Rejected" with nothing to act on.
+ *
+ * Deciding the status a listing is already in is refused. It would append a
+ * second row saying nothing changed, and "Verified → Verified" in a history
+ * somebody is reading to settle a dispute is noise at best.
  */
 export async function setPropertyStatus(
+  actor: Actor,
   id: string,
-  status: PropertyStatus,
+  input: PropertyStatusInput,
 ): Promise<OwnerProperty> {
-  const existing = await prisma.property.findUnique({ where: { id }, select: { id: true } });
+  const existing = await prisma.property.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      status: true,
+      title: true,
+      owner: { select: { id: true, email: true } },
+    },
+  });
   if (!existing) throw new NotFoundError("Property not found");
 
-  const updated = await prisma.property.update({
-    where: { id },
-    data: { status },
-    include: { images: true },
+  if (existing.status === input.status) {
+    throw new ConflictError(`This listing is already ${STATUS_WORDS[input.status]}.`);
+  }
+
+  const updated = await prisma.$transaction(async (tx) => {
+    await tx.propertyVerification.create({
+      data: {
+        propertyId: existing.id,
+        fromStatus: existing.status,
+        toStatus: input.status,
+        reason: input.reason ?? null,
+        actorId: actor.id,
+      },
+    });
+    return tx.property.update({
+      where: { id: existing.id },
+      data: { status: input.status },
+      include: { images: true, verifications: LATEST_DECISION },
+    });
   });
+
+  // After the commit, and never allowed to fail the request: the decision is
+  // already made and recorded. A landlord who does not get the email still sees
+  // the outcome and the reason on their dashboard.
+  if (existing.owner?.email) {
+    void notifyOwnerOfDecision({
+      to: existing.owner.email,
+      title: existing.title,
+      status: input.status,
+      reason: input.reason,
+      propertyId: existing.id,
+    });
+  } else {
+    // Seeded and imported listings have no account behind them. Worth a line:
+    // silence here would otherwise look like a delivery failure.
+    logger.info(
+      { propertyId: existing.id, status: input.status },
+      "listing decision not emailed — no owner account on the listing",
+    );
+  }
+
   return toOwnerProperty(updated);
+}
+
+/** Status as it reads in a sentence to a landlord, not as an enum. */
+const STATUS_WORDS: Record<PropertyStatus, string> = {
+  DRAFT: "a draft",
+  PENDING_VERIFICATION: "waiting for review",
+  VERIFIED: "verified",
+  REJECTED: "rejected",
+  SUSPENDED: "suspended",
+};
+
+async function notifyOwnerOfDecision(args: {
+  to: string;
+  title: string;
+  status: PropertyStatus;
+  reason?: string;
+  propertyId: string;
+}): Promise<void> {
+  // DRAFT never reaches here — `propertyStatusSchema` does not offer it — but the
+  // email copy is keyed by status, so the type has to say so.
+  if (args.status === PropertyStatus.DRAFT) return;
+
+  try {
+    await sendListingDecisionEmail({
+      to: args.to,
+      title: args.title,
+      status: args.status,
+      ...(args.reason ? { reason: args.reason } : {}),
+      listingUrl: `${frontendBaseUrl}/landlord/properties/${args.propertyId}/edit`,
+    });
+  } catch (err) {
+    logger.error({ err, propertyId: args.propertyId }, "failed to email listing decision");
+  }
+}
+
+/**
+ * The admin review queue.
+ *
+ * The counterpart to `/properties/mine`, which is scoped to the caller even for
+ * an admin. Without this an admin could only approve a listing whose id they had
+ * been given out of band — the decision endpoint existed with no way to find
+ * anything to decide.
+ *
+ * Oldest first, deliberately: a queue sorted newest-first starves whoever has
+ * been waiting longest. `updatedAt` rather than the submit time, so a landlord
+ * who edits while pending goes to the back — the listing changed and needs
+ * reading again from the top.
+ */
+export async function listReviewQueue(q: ReviewQueueQuery): Promise<OwnerPropertyListResult> {
+  const where: Prisma.PropertyWhereInput = { status: q.status };
+  const skip = (q.page - 1) * q.pageSize;
+
+  const [rows, total] = await Promise.all([
+    prisma.property.findMany({
+      where,
+      include: { images: true, verifications: LATEST_DECISION },
+      orderBy: [{ updatedAt: "asc" }, { id: "desc" }],
+      skip,
+      take: q.pageSize,
+    }),
+    prisma.property.count({ where }),
+  ]);
+
+  return {
+    properties: rows.map(toOwnerProperty),
+    ...paginate(total, q.page, q.pageSize),
+  };
+}
+
+export type VerificationEntry = {
+  id: string;
+  fromStatus: PropertyStatus;
+  toStatus: PropertyStatus;
+  reason: string | null;
+  actor: { id: string; name: string } | null;
+  createdAt: string;
+};
+
+/**
+ * Everything that has happened to one listing's status, newest first.
+ *
+ * Visible to an admin and to the listing's own owner — a landlord disputing a
+ * decision should be able to read the same history the reviewer can. The
+ * ownership constraint is `ownedBy`, so a stranger gets 404 rather than a 403
+ * that would confirm the listing exists.
+ */
+export async function getVerificationHistory(
+  actor: Actor,
+  id: string,
+): Promise<VerificationEntry[]> {
+  const property = await prisma.property.findFirst({
+    where: ownedBy(actor, id),
+    select: { id: true },
+  });
+  if (!property) throw new NotFoundError("Property not found");
+
+  const rows = await prisma.propertyVerification.findMany({
+    where: { propertyId: property.id },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    include: { actor: { select: { id: true, firstName: true, lastName: true } } },
+  });
+
+  return rows.map((row) => ({
+    id: row.id,
+    fromStatus: row.fromStatus,
+    toStatus: row.toStatus,
+    reason: row.reason,
+    // Name only. An admin's email address is not something a landlord reading
+    // their own listing's history needs.
+    actor: row.actor
+      ? { id: row.actor.id, name: fullName(row.actor.firstName, row.actor.lastName) }
+      : null,
+    createdAt: row.createdAt.toISOString(),
+  }));
 }
