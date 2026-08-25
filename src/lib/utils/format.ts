@@ -23,6 +23,41 @@ export function formatDate(iso: string): string {
   }).format(new Date(iso));
 }
 
+/**
+ * A date and a time, for an appointment two people have to keep.
+ *
+ * Rendered in the reader's own timezone, which is the honest thing to do and
+ * almost always WAT for both of them anyway. The weekday is included because
+ * "Saturday the 5th" is how someone checks a viewing against their week —
+ * "05/09" is not.
+ */
+export function formatDateTime(iso: string): string {
+  return new Intl.DateTimeFormat("en-NG", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(iso));
+}
+
+/**
+ * A `datetime-local` input's value for a given instant, in LOCAL time.
+ *
+ * `toISOString()` cannot be used for this: it converts to UTC, so a Nigerian
+ * picking 09:00 would find the field showing 08:00. The input has no timezone of
+ * its own — it means whatever the person in front of it means — so the string has
+ * to be assembled from the local parts.
+ */
+export function toDateTimeLocalValue(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return (
+    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` +
+    `T${pad(date.getHours())}:${pad(date.getMinutes())}`
+  );
+}
+
 const typeLabels: Record<Property["type"], string> = {
   studio: "Self-contained",
   one_bedroom: "1 bedroom",

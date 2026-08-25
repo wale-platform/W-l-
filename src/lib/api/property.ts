@@ -33,14 +33,6 @@ export const propertyApi = {
     return propertySchema.parse(data);
   },
 
-  /**
-   * Mark interest in a property — triggers an inspection request email.
-   */
-  async requestInspection(propertyId: string): Promise<{ message: string }> {
-    const { data } = await apiClient.post(`/properties/${propertyId}/inspect`);
-    return data;
-  },
-
   /* ------------------------------------------------- the caller's own -- */
 
   /**

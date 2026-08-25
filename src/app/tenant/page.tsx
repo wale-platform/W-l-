@@ -12,7 +12,6 @@ import {
   CardBody,
   CardHeader,
   CardTitle,
-  Badge,
 } from "@/components/ui";
 import { requireRole } from "@/lib/api/server-auth";
 
@@ -23,7 +22,7 @@ export default async function TenantDashboardPage() {
   await requireRole(["TENANT", "MOVER", "ADMIN"]);
 
   return (
-    <main>
+    <main id="main">
       <Section>
         <Container size="wide" className="flex flex-col gap-8">
           <SectionHeading
@@ -33,8 +32,16 @@ export default async function TenantDashboardPage() {
           />
 
           <div className="flex flex-wrap gap-3">
+            <Link href="/tenant/inspections">
+              <Button>My viewings</Button>
+            </Link>
+
+            <Link href="/properties">
+              <Button tone="outline">Browse homes</Button>
+            </Link>
+
             <Link href="/tenant/properties/upload">
-              <Button>Upload Apartment</Button>
+              <Button tone="outline">Upload Apartment</Button>
             </Link>
 
             <Link href="/tenant/properties">
@@ -45,21 +52,28 @@ export default async function TenantDashboardPage() {
           <div className="grid gap-6 md:grid-cols-3">
             <Card>
               <CardHeader>
+                <CardTitle>Viewings</CardTitle>
+              </CardHeader>
+              <CardBody className="flex flex-col gap-3">
+                <p className="text-sm text-ink-500">
+                  Places you have asked to see, and what each landlord said back.
+                </p>
+                <Link href="/tenant/inspections" className="w-fit">
+                  <Button size="sm" tone="outline">
+                    See your viewings
+                  </Button>
+                </Link>
+              </CardBody>
+            </Card>
+
+            <Card>
+              <CardHeader>
                 <CardTitle>Apartment</CardTitle>
               </CardHeader>
               <CardBody>
                 <p className="text-sm text-ink-500">
                   Upload and manage your current apartment information.
                 </p>
-              </CardBody>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Verification</CardTitle>
-              </CardHeader>
-              <CardBody>
-                <Badge tone="warning">Pending verification</Badge>
               </CardBody>
             </Card>
 

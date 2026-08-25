@@ -644,6 +644,210 @@ export type SearchParams = z.input<typeof searchParamsSchema>;
 /** What goes on the wire, after `amenities` is joined. */
 export type SearchQuery = z.output<typeof searchParamsSchema>;
 
+/* -------------------------------------------------------- Inspections -- */
+
+/**
+ * Where a viewing request has got to (Prisma `InspectionStatus`).
+ *
+ * REQUESTED and CONFIRMED are the live ones — the only two a landlord can still
+ * act on, and the only two that stop the same tenant asking about the same place
+ * again. The other three are closed: DECLINED and COMPLETED by the landlord,
+ * CANCELLED by the tenant.
+ */
+export const inspectionStatusSchema = z.enum([
+  "REQUESTED",
+  "CONFIRMED",
+  "DECLINED",
+  "CANCELLED",
+  "COMPLETED",
+]);
+
+export type InspectionStatus = z.infer<typeof inspectionStatusSchema>;
+
+/**
+ * How each state reads, kept next to the enum so the label and the colour cannot
+ * drift from it.
+ *
+ * Both sides of a request see the same row, so the wording has to be true from
+ * either chair. "Awaiting reply" works for the tenant who is waiting and the
+ * landlord who owes one; "Awaiting your reply" would be a lie on one of the two
+ * dashboards.
+ */
+export const inspectionStatusCopy: Record<
+  InspectionStatus,
+  { label: string; tone: "neutral" | "warning" | "success" | "danger" }
+> = {
+  REQUESTED: { label: "Awaiting reply", tone: "warning" },
+  CONFIRMED: { label: "Confirmed", tone: "success" },
+  DECLINED: { label: "Declined", tone: "danger" },
+  CANCELLED: { label: "Cancelled", tone: "neutral" },
+  COMPLETED: { label: "Viewed", tone: "neutral" },
+};
+
+/**
+ * Just enough of the listing to identify it in a row of requests.
+ *
+ * `image` is not `.url()`: the first-party imagery is stored root-relative
+ * (`/listings/listing-01.jpg`) and only Cloudinary uploads are absolute, so
+ * demanding a URL here would fail to parse half the catalogue.
+ */
+const inspectionListingSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  address: z.string(),
+  city: z.string(),
+  state: z.string(),
+  price: z.number(),
+  image: z.string().optional(),
+});
+
+/**
+ * A viewing request as the person who asked sees it.
+ *
+ * Every optional field is genuinely absent rather than null when there is
+ * nothing to show — the server omits them (see `inspection.serializer.ts`), so
+ * `note === undefined` means "they did not leave one", not "we lost it".
+ */
+export const inspectionSchema = z.object({
+  id: z.string(),
+  status: inspectionStatusSchema,
+  preferredAt: z.string(),
+  note: z.string().optional(),
+  response: z.string().optional(),
+  respondedAt: z.string().optional(),
+  createdAt: z.string(),
+  property: inspectionListingSchema,
+});
+
+export type Inspection = z.infer<typeof inspectionSchema>;
+
+/**
+ * The same request as the listing's owner sees it: with a name to expect at the
+ * gate.
+ *
+ * `tenant.phone` is optional because the server only sends it once the landlord
+ * has CONFIRMED — before that a request is just an ask, and a stream of them
+ * would otherwise be a stream of students' phone numbers to whoever posts a
+ * listing. So this optional field is the only thing that decides whether the UI
+ * has a number to show; it must never substitute one from anywhere else.
+ */
+export const landlordInspectionSchema = inspectionSchema.extend({
+  tenant: z.object({
+    id: z.string(),
+    name: z.string(),
+    phone: z.string().optional(),
+  }),
+});
+
+export type LandlordInspection = z.infer<typeof landlordInspectionSchema>;
+
+export const inspectionListResponseSchema = z.object({
+  inspections: z.array(inspectionSchema),
+  total: z.number().int(),
+  page: z.number().int(),
+  pageSize: z.number().int(),
+  totalPages: z.number().int(),
+});
+
+export type InspectionListResponse = z.infer<typeof inspectionListResponseSchema>;
+
+export const landlordInspectionListResponseSchema = inspectionListResponseSchema.extend({
+  inspections: z.array(landlordInspectionSchema),
+});
+
+export type LandlordInspectionListResponse = z.infer<
+  typeof landlordInspectionListResponseSchema
+>;
+
+/**
+ * `GET /inspections/properties/:id/mine` — have I already asked about this one?
+ *
+ * `null` is a successful answer, not a missing resource: "you have not asked to
+ * view this" is exactly what the listing page's button needs to know.
+ */
+export const myInspectionResponseSchema = z.object({
+  inspection: inspectionSchema.nullable(),
+});
+
+export const inspectionListParamsSchema = z.object({
+  status: inspectionStatusSchema.optional(),
+  page: z.number().int().min(1).default(1),
+  pageSize: z.number().int().min(1).max(50).default(20),
+});
+
+export type InspectionListParams = z.infer<typeof inspectionListParamsSchema>;
+
+/**
+ * What a tenant sends to ask for a viewing, mirroring
+ * `backend/src/modules/inspections/inspection.schemas.ts`.
+ *
+ * The horizon is the server's, restated so a typo'd year is caught on the field
+ * rather than as a 422. The floor here is stricter than the server's by a few
+ * minutes: the server allows a little clock slack so a slow connection is not
+ * punished, but a form should never let someone *pick* a time that has passed.
+ *
+ * `note` is trimmed to `undefined` when blank, because the server requires at
+ * least one character if the field is present at all — an empty textarea must
+ * send nothing, not `""`.
+ */
+const VIEWING_HORIZON_DAYS = 90;
+
+export const createInspectionSchema = z.object({
+  preferredAt: z
+    .string()
+    .trim()
+    .datetime({ offset: true, message: "Pick a date and time for the viewing" })
+    .refine((v) => new Date(v).getTime() > Date.now(), {
+      message: "Pick a time in the future",
+    })
+    .refine((v) => new Date(v).getTime() < Date.now() + VIEWING_HORIZON_DAYS * 86_400_000, {
+      message: `Pick a time within the next ${VIEWING_HORIZON_DAYS} days`,
+    }),
+  note: z
+    .string()
+    .trim()
+    .max(500, "Keep this under 500 characters")
+    .optional()
+    .transform((v) => (v ? v : undefined)),
+});
+
+export type CreateInspectionInput = z.input<typeof createInspectionSchema>;
+
+/**
+ * The landlord's answer to a request.
+ *
+ * Three reachable states and no more. REQUESTED is absent because un-answering
+ * a request would leave the tenant holding a confirmation they can no longer
+ * rely on, and CANCELLED is absent because that belongs to the tenant — a
+ * landlord declines.
+ *
+ * DECLINED needs words. The tenant is shown them verbatim, and "declined" on its
+ * own leaves them unable to tell whether to propose another time or give up on
+ * the place. The server enforces the same floor; this copy exists so the landlord
+ * finds out before they submit.
+ */
+export const inspectionDecisionSchema = z
+  .object({
+    status: z.enum(["CONFIRMED", "DECLINED", "COMPLETED"]),
+    response: z
+      .string()
+      .trim()
+      .max(1000, "Keep this under 1000 characters")
+      .optional()
+      .transform((v) => (v ? v : undefined)),
+  })
+  .superRefine((body, ctx) => {
+    if (body.status === "DECLINED" && (body.response ?? "").length < 10) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["response"],
+        message: "Say why, or suggest another time — the tenant sees this word for word",
+      });
+    }
+  });
+
+export type InspectionDecision = z.infer<typeof inspectionDecisionSchema>;
+
 /* ------------------------------------------------------------- Media -- */
 
 /**

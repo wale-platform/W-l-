@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 
 import { Container, Section } from "@/components/layout/Container";
+import { InspectionRequest } from "@/components/property/InspectionRequest";
 import { PropertyContact } from "@/components/property/PropertyContact";
 import { PropertyGallery } from "@/components/property/PropertyGallery";
 import { Badge, Breadcrumbs, Card, CardBody } from "@/components/ui";
@@ -211,6 +212,12 @@ export default async function PropertyDetailPage({ params }: Props) {
             </Card>
 
             <PropertyContact property={property} />
+
+            {/* Below the contact card on purpose: someone who has decided to
+                call can do so without scrolling past a form, and the safety
+                note about never paying to inspect is read before the booking
+                flow rather than after it. */}
+            <InspectionRequest propertyId={property.id} propertyTitle={property.title} />
           </aside>
         </div>
       </Container>
