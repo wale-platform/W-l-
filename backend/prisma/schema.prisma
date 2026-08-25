@@ -71,6 +71,7 @@ model User {
   roles                   UserRole[]
   grantedRoles            UserRole[] @relation("RoleGrantedBy")
   verificationDecisions   PropertyVerification[]
+  inspectionRequests      Inspection[] @relation("InspectionRequests")
 
   @@index([role])
   @@index([status])
@@ -218,6 +219,7 @@ model Property {
   owner  User?           @relation(fields: [ownerId], references: [id], onDelete: SetNull)
   images PropertyImage[]
   verifications PropertyVerification[]
+  inspections   Inspection[]
 
   @@index([status])
   @@index([university])
@@ -287,7 +289,82 @@ model PropertyVerification {
   @@index([createdAt])
 }
 
-// Deferred domains (messaging, notifications, wallet, bookings, media assets)
-// are intentionally NOT modelled yet — they are added in their own phases to
+// ─────────────────────────────────────────────────────────── Inspections ──
+
+// Where an inspection request is up to.
+//
+// REQUESTED is the tenant's ask. The landlord then does one of three things:
+// CONFIRMED (that time works), DECLINED (it does not — with a reason, so the
+// tenant is not left guessing), or nothing, which is what CANCELLED and
+// COMPLETED exist to close off later.
+//
+// COMPLETED means the viewing happened. Nothing on the platform can observe
+// that, so it is a landlord's assertion and is treated as one — see
+// inspection.service.ts. It is here because "did this viewing actually happen"
+// is the question a residence claim in the mover domain will need to lean on,
+// and a status nobody can ever set is worse than no status at all.
+enum InspectionStatus {
+  REQUESTED
+  CONFIRMED
+  DECLINED
+  CANCELLED
+  COMPLETED
+}
+
+// A tenant asking to see a property in person.
+//
+// The whole point of the product is that nobody rents a room they have not
+// stood in, so this is the one action a listing page must support beyond
+// reading it. It replaces the phone-call-and-hope flow: the request is dated,
+// it is attributable to an account, and the landlord's answer is recorded next
+// to it.
+//
+// `preferredAt` is what the TENANT asked for and never changes; a landlord who
+// wants a different time declines and says so, rather than silently rewriting
+// the appointment under the tenant. That keeps the row honest about who
+// proposed what — and a tenant who turns up at the original time because they
+// never noticed an edit is exactly the failure this avoids.
+//
+// No money passes through here and none ever should. The advance-fee scam the
+// listing page warns about IS the inspection fee, so the model has no amount
+// column to tempt anyone into adding one.
+model Inspection {
+  id         String           @id @default(cuid())
+  propertyId String
+  // The account that asked. Required: an anonymous request cannot be answered,
+  // and the landlord needs a name and a number to expect at the gate.
+  tenantId   String
+  status     InspectionStatus @default(REQUESTED)
+
+  // When the tenant would like to come. A datetime, not a date: "Saturday" is
+  // not something a landlord can be at the property for.
+  preferredAt DateTime
+  // Anything the tenant wants the landlord to know ("I can only do mornings").
+  note        String?
+
+  // The landlord's answer, in their own words. Required by the service when
+  // declining — "Declined" with no explanation tells the tenant nothing about
+  // whether to propose another time or move on.
+  response    String?
+  respondedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  tenant   User     @relation("InspectionRequests", fields: [tenantId], references: [id], onDelete: Cascade)
+
+  // One live request per tenant per property, enforced in the database rather
+  // than by a check-then-insert that two taps on a slow connection can race
+  // past. Scoped to REQUESTED only — via a partial index in the migration,
+  // which Prisma cannot express — because a tenant whose viewing was declined
+  // must be able to ask again for a different time.
+  @@index([propertyId, status])
+  // The landlord's queue: their listings' requests, newest ask first.
+  @@index([tenantId, createdAt])
+}
+
+// Deferred domains (messaging, notifications, wallet, media assets) are
+// intentionally NOT modelled yet — they are added in their own phases to
 // avoid speculative, unused tables. The relations above are shaped so they can
 // be introduced additively.

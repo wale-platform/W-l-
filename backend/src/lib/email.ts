@@ -153,3 +153,105 @@ export function sendListingDecisionEmail(args: {
 
   return sendMail({ to, subject: copy.subject, text });
 }
+
+/**
+ * How a viewing time reads in an email.
+ *
+ * Formatted in Africa/Lagos explicitly rather than in the server's zone, because
+ * the server may be anywhere and "10:00" shifting by an hour is the difference
+ * between a landlord being at the gate and not. Both parties are in Nigeria; if
+ * that stops being true this becomes a per-user preference, not a server default.
+ */
+function viewingTime(at: Date): string {
+  return at.toLocaleString("en-NG", {
+    timeZone: "Africa/Lagos",
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
+/**
+ * Tell a landlord somebody wants to see their place.
+ *
+ * The point of the email is that it is actionable away from the dashboard: a
+ * landlord reads it on their phone and needs the time and the tenant's note
+ * right there, not a "you have a notification" nudge that requires a login to
+ * decipher.
+ *
+ * The tenant's phone number is deliberately NOT here. It reaches the landlord
+ * once they confirm the viewing — see inspection.serializer.ts — and an email is
+ * forwarded far more casually than a dashboard is shared.
+ */
+export function sendInspectionRequestEmail(args: {
+  to: string;
+  title: string;
+  preferredAt: Date;
+  note?: string;
+  queueUrl: string;
+}): Promise<void> {
+  const { to, title, preferredAt, note, queueUrl } = args;
+
+  const text = [
+    `Somebody wants to view "${title}".`,
+    "",
+    `They asked for: ${viewingTime(preferredAt)}`,
+    ...(note ? ["", `Their note: ${note}`] : []),
+    "",
+    "Confirm the time or suggest another one here:",
+    queueUrl,
+    "",
+    "Once you confirm, we'll share their phone number so you can reach them.",
+  ].join("\n");
+
+  return sendMail({ to, subject: `Viewing request: ${title}`, text });
+}
+
+/**
+ * Tell a tenant whether the viewing is on.
+ *
+ * `response` is the landlord's own words, passed through unchanged. On a decline
+ * it is the only thing that says whether to propose another time or look
+ * elsewhere, which is why the schema requires one.
+ *
+ * The confirmation repeats the safety line from the listing page. It is the same
+ * warning, on purpose: this email arrives at the exact moment somebody might be
+ * asked to "secure the viewing" with a transfer, and that is when it is worth
+ * reading rather than when it was scrolled past on a listing.
+ */
+export function sendInspectionDecisionEmail(args: {
+  to: string;
+  title: string;
+  status: "CONFIRMED" | "DECLINED";
+  preferredAt: Date;
+  response?: string;
+  listingUrl: string;
+}): Promise<void> {
+  const { to, title, status, preferredAt, response, listingUrl } = args;
+
+  const confirmed = status === "CONFIRMED";
+  const text = [
+    confirmed
+      ? `Your viewing of "${title}" is confirmed for ${viewingTime(preferredAt)}.`
+      : `The landlord can't do ${viewingTime(preferredAt)} for "${title}".`,
+    ...(response ? ["", `What they said: ${response}`] : []),
+    "",
+    confirmed ? "The listing:" : "You can ask for another time here:",
+    listingUrl,
+    ...(confirmed
+      ? [
+          "",
+          "Never pay to inspect. No inspection fee, caution fee, or agreement fee should be paid before you have seen the place and met the landlord.",
+        ]
+      : []),
+  ].join("\n");
+
+  return sendMail({
+    to,
+    subject: confirmed ? `Viewing confirmed: ${title}` : `Viewing not confirmed: ${title}`,
+    text,
+  });
+}

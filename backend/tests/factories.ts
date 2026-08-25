@@ -1,5 +1,6 @@
 import type {
   EmailVerificationToken,
+  Inspection,
   PasswordResetToken,
   Property,
   PropertyImage,
@@ -176,6 +177,58 @@ export function makeVerification(
     reason: "The second photo is of a different building. Replace it and resubmit.",
     actorId: "usr_admin",
     createdAt: new Date("2026-02-01T00:00:00.000Z"),
+    ...overrides,
+  };
+}
+
+/** The listing summary the inspection service's `include` selects. */
+const INSPECTION_LISTING = {
+  id: "prop_test_1",
+  title: "Sunny Studio near UNILAG",
+  address: "12 Akoka Road",
+  city: "Yaba",
+  state: "Lagos",
+  price: 850_000,
+  images: [{ url: "/listings/listing-01.jpg", position: 0 }],
+};
+
+/** The tenant summary the landlord-facing `include` selects. */
+const INSPECTION_TENANT = {
+  id: "usr_tenant",
+  firstName: "Ada",
+  lastName: "Student",
+  phone: "+2348012345678",
+};
+
+type InspectionRow = Inspection & {
+  property: typeof INSPECTION_LISTING;
+  tenant: typeof INSPECTION_TENANT;
+};
+
+/**
+ * An inspection row with both relations attached, as the service's `include`
+ * returns it.
+ *
+ * REQUESTED and unanswered by default — the state a landlord acts on. Pass
+ * `status` and `respondedAt` together to model an answered one, since a row
+ * claiming to be CONFIRMED with no `respondedAt` is a state the service cannot
+ * produce and a test built on it would be proving nothing.
+ */
+export function makeInspection(overrides: Partial<InspectionRow> = {}): InspectionRow {
+  const now = new Date("2026-01-01T00:00:00.000Z");
+  return {
+    id: "insp_test_1",
+    propertyId: "prop_test_1",
+    tenantId: "usr_tenant",
+    status: "REQUESTED",
+    preferredAt: new Date("2026-09-05T10:00:00.000Z"),
+    note: null,
+    response: null,
+    respondedAt: null,
+    createdAt: now,
+    updatedAt: now,
+    property: INSPECTION_LISTING,
+    tenant: INSPECTION_TENANT,
     ...overrides,
   };
 }
