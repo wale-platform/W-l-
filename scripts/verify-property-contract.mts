@@ -404,6 +404,32 @@ if (!propertyId) {
       !parsed.data.properties.some((p) => "status" in p),
     );
   }
+
+  /**
+   * And hides it from the direct read too, not just from the list.
+   *
+   * The public detail page is built on this: it renders one 404 for a listing
+   * that never existed and for one that is hidden, so that a stranger with a
+   * list of ids cannot tell the two apart. That only holds if the single-listing
+   * read refuses a DRAFT — being absent from the catalogue is not the same
+   * guarantee, and it is the weaker of the two.
+   *
+   * Asked as the OWNER, which makes the check sharper: even the person who owns
+   * the draft gets a 404 from the public route, because visibility here is the
+   * listing's status and not the caller's relationship to it. The owner reads
+   * their own draft through `/properties/mine/:id` instead.
+   */
+  const direct = await owner.call("GET", `/properties/${propertyId}`);
+  check(
+    "a DRAFT is 404 on the public single-listing read, even for its owner",
+    direct.status === 404,
+    `got ${direct.status}`,
+  );
+  check(
+    "that 404 says nothing about the listing existing",
+    !JSON.stringify(direct.data ?? {}).includes(propertyId),
+    JSON.stringify(direct.data ?? {}).slice(0, 200),
+  );
 }
 
 // 5. A refusal reads as a sentence, not as an axios string.
