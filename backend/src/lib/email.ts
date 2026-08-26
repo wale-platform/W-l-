@@ -255,3 +255,104 @@ export function sendInspectionDecisionEmail(args: {
     text,
   });
 }
+
+/**
+ * A residence period as a sentence.
+ *
+ * The dates are `@db.Date` columns stored at UTC midnight, so they are formatted
+ * in UTC. Using the server's zone would shift a date by a day for half the world
+ * and turn "March 2024" into "February 2024" on a machine in Lagos.
+ */
+function residencePeriod(from: Date, to: Date | null): string {
+  const month = (d: Date) =>
+    d.toLocaleDateString("en-NG", { timeZone: "UTC", month: "long", year: "numeric" });
+
+  return to ? `${month(from)} to ${month(to)}` : `${month(from)} to now`;
+}
+
+/**
+ * Tell a property owner that somebody says they used to live there.
+ *
+ * The claimant's NAME is not here, matching the viewing request email: the
+ * dashboard is where identity belongs, because an email is forwarded far more
+ * casually than a dashboard is shared. What the email carries is the part that
+ * decides whether this is worth opening — which place, which period, and whether
+ * the platform already has evidence for it.
+ *
+ * `corroborated` is that evidence: a viewing of this same property, by this same
+ * person, that the owner themselves marked as completed. It is mentioned here
+ * rather than left on the dashboard because it is the difference between "some
+ * stranger is claiming a tenancy" and "the person you showed the flat to is
+ * saying they took it", and an owner deciding on their phone should know which
+ * one this is before they tap.
+ */
+export function sendResidenceClaimEmail(args: {
+  to: string;
+  title: string;
+  movedInAt: Date;
+  movedOutAt: Date | null;
+  corroborated: boolean;
+  note?: string;
+  queueUrl: string;
+}): Promise<void> {
+  const { to, title, movedInAt, movedOutAt, corroborated, note, queueUrl } = args;
+
+  const text = [
+    `Somebody says they lived at "${title}".`,
+    "",
+    `The period they gave: ${residencePeriod(movedInAt, movedOutAt)}`,
+    ...(note ? ["", `Their note: ${note}`] : []),
+    ...(corroborated
+      ? ["", "Our records show you marked a viewing of this place as completed for them."]
+      : []),
+    "",
+    "Confirm or reject the claim here:",
+    queueUrl,
+    "",
+    "Confirming lets them publish a review of the property as a verified former resident. Until you do, anything they write is labelled unverified.",
+  ].join("\n");
+
+  return sendMail({ to, subject: `Residence claim: ${title}`, text });
+}
+
+/**
+ * Tell someone whether their residence claim was accepted.
+ *
+ * `reason` is the owner's own words on a rejection, passed through unchanged. It
+ * is the only thing that distinguishes "you picked the wrong flat off the search
+ * page" from "I do not believe you", which is why the schema requires one.
+ *
+ * The confirmation says what it unlocks, because a confirmed claim is worth
+ * nothing to the claimant unless they know it entitles them to review the place.
+ */
+export function sendResidenceDecisionEmail(args: {
+  to: string;
+  title: string;
+  status: "CONFIRMED" | "REJECTED";
+  movedInAt: Date;
+  movedOutAt: Date | null;
+  reason?: string;
+  historyUrl: string;
+}): Promise<void> {
+  const { to, title, status, movedInAt, movedOutAt, reason, historyUrl } = args;
+
+  const confirmed = status === "CONFIRMED";
+  const period = residencePeriod(movedInAt, movedOutAt);
+  const text = [
+    confirmed
+      ? `Your claim to have lived at "${title}" (${period}) has been confirmed.`
+      : `Your claim to have lived at "${title}" (${period}) was not accepted.`,
+    ...(reason ? ["", `What they said: ${reason}`] : []),
+    "",
+    confirmed
+      ? "You can now write a review of the place, and it will show as a verified former resident's."
+      : "If you got the property or the dates wrong, you can correct it here:",
+    historyUrl,
+  ].join("\n");
+
+  return sendMail({
+    to,
+    subject: confirmed ? `Residence confirmed: ${title}` : `Residence claim not accepted: ${title}`,
+    text,
+  });
+}

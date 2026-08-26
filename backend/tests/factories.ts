@@ -5,6 +5,7 @@ import type {
   Property,
   PropertyImage,
   PropertyVerification,
+  ResidenceHistory,
   Session,
 } from "@prisma/client";
 
@@ -229,6 +230,64 @@ export function makeInspection(overrides: Partial<InspectionRow> = {}): Inspecti
     updatedAt: now,
     property: INSPECTION_LISTING,
     tenant: INSPECTION_TENANT,
+    ...overrides,
+  };
+}
+
+/** The property summary the residence service's `include` selects — no price. */
+const RESIDENCE_LISTING = {
+  id: "prop_test_1",
+  title: "Sunny Studio near UNILAG",
+  address: "12 Akoka Road",
+  city: "Yaba",
+  state: "Lagos",
+  images: [{ url: "/listings/listing-01.jpg", position: 0 }],
+};
+
+/** The claimant summary the owner-facing `include` selects. No contact details. */
+const RESIDENCE_CLAIMANT = {
+  id: "usr_mover",
+  firstName: "Ada",
+  lastName: "Student",
+};
+
+type ResidenceRow = ResidenceHistory & {
+  property: typeof RESIDENCE_LISTING;
+  user: typeof RESIDENCE_CLAIMANT;
+  review: { id: string } | null;
+};
+
+/**
+ * A residence claim with both relations attached, as the service's `include`
+ * returns it.
+ *
+ * UNVERIFIED and undecided by default, which is the only state a claim can be
+ * created in and the state an owner acts on. Pass `status`, `confirmedById` and
+ * `decidedAt` together to model a decided one — a row claiming CONFIRMED with no
+ * decider is a state the service cannot produce, and a test built on it would be
+ * proving nothing.
+ *
+ * `movedInAt`/`movedOutAt` are UTC midnight, matching the `@db.Date` columns.
+ */
+export function makeResidence(overrides: Partial<ResidenceRow> = {}): ResidenceRow {
+  const now = new Date("2026-01-01T00:00:00.000Z");
+  return {
+    id: "res_test_1",
+    userId: "usr_mover",
+    propertyId: "prop_test_1",
+    status: "UNVERIFIED",
+    movedInAt: new Date("2024-09-01T00:00:00.000Z"),
+    movedOutAt: new Date("2025-08-31T00:00:00.000Z"),
+    note: null,
+    corroboratedByInspectionId: null,
+    confirmedById: null,
+    decidedAt: null,
+    decisionReason: null,
+    createdAt: now,
+    updatedAt: now,
+    property: RESIDENCE_LISTING,
+    user: RESIDENCE_CLAIMANT,
+    review: null,
     ...overrides,
   };
 }
