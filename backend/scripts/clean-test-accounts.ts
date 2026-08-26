@@ -8,7 +8,7 @@ import { PrismaClient } from "@prisma/client";
  *   npx tsx scripts/clean-test-accounts.ts          # show what would go
  *   npx tsx scripts/clean-test-accounts.ts --delete # actually delete
  *
- * Scope is one narrow pattern: propcheck+…@wale.test and authcheck+…@wale.test,
+ * Scope is one narrow pattern: propcheck+…, authcheck+… and inspcheck+…@wale.test,
  * the addresses those scripts generate. It cannot touch a seeded or real account,
  * which is the whole point of having it rather than typing DELETE at a prompt
  * against a database somebody else is also using.
@@ -23,6 +23,7 @@ import { PrismaClient } from "@prisma/client";
 const PATTERNS = [
   { startsWith: "propcheck+", endsWith: "@wale.test" },
   { startsWith: "authcheck+", endsWith: "@wale.test" },
+  { startsWith: "inspcheck+", endsWith: "@wale.test" },
 ];
 
 async function counts(p: PrismaClient) {
