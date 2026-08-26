@@ -72,6 +72,14 @@ model User {
   grantedRoles            UserRole[] @relation("RoleGrantedBy")
   verificationDecisions   PropertyVerification[]
   inspectionRequests      Inspection[] @relation("InspectionRequests")
+  residenceClaims         ResidenceHistory[] @relation("ResidenceClaims")
+  // Claims this account decided on — the other side of `residenceClaims`, kept
+  // separate so "places I say I lived" and "claims I confirmed as the landlord"
+  // are never the same list. A user can appear in both, and must not be able to
+  // appear in both for the SAME row (see residence.service.ts).
+  residenceDecisions      ResidenceHistory[] @relation("ResidenceDecisions")
+  reviewsWritten          PropertyReview[]   @relation("ReviewsWritten")
+  reviewReports           ReviewReport[]     @relation("ReviewReports")
 
   @@index([role])
   @@index([status])
@@ -220,6 +228,8 @@ model Property {
   images PropertyImage[]
   verifications PropertyVerification[]
   inspections   Inspection[]
+  residences    ResidenceHistory[]
+  reviews       PropertyReview[]
 
   @@index([status])
   @@index([university])
@@ -353,6 +363,10 @@ model Inspection {
 
   property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   tenant   User     @relation("InspectionRequests", fields: [tenantId], references: [id], onDelete: Cascade)
+  // Residence claims that cite this viewing as corroboration. A list rather than
+  // a single row because the same COMPLETED viewing can be cited by two claims if
+  // someone lived at the property twice — see ResidenceHistory.
+  corroborates ResidenceHistory[]
 
   // One live request per tenant per property, enforced in the database rather
   // than by a check-then-insert that two taps on a slow connection can race
@@ -362,6 +376,200 @@ model Inspection {
   @@index([propertyId, status])
   // The landlord's queue: their listings' requests, newest ask first.
   @@index([tenantId, createdAt])
+}
+
+// ────────────────────────────────────────────────── Residence & reviews ──
+
+// How much weight a residence claim carries.
+//
+// UNVERIFIED is where every claim starts and there is no path that skips it. A
+// person saying "I lived here" is an assertion about somebody else's property,
+// and the platform has no way to observe it — so the status names what we
+// actually know, which at that point is nothing.
+//
+// CONFIRMED means the LISTING'S OWNER (or an admin) said yes. That is the only
+// party in a position to know, and they are also the party with an interest in
+// saying no, which is what makes a yes worth something.
+//
+// REJECTED means they said no. The row is kept: a rejected claim is the record
+// that someone tried, and deleting it would let them try again with a clean
+// slate every time.
+enum ResidenceStatus {
+  UNVERIFIED
+  CONFIRMED
+  REJECTED
+}
+
+// A person's claim to have lived at a property.
+//
+// This is the foundation the review system stands on, and the reason it exists
+// at all: a review of a Nigerian student flat is worth reading only if the
+// person writing it actually lived there through a rainy season. So the claim
+// comes first and the review hangs off it.
+//
+// WHAT STOPS SOMEONE CLAIMING AN ARBITRARY PROPERTY. Not one thing — several,
+// because no single one of them is sufficient:
+//
+//  1. A claim confers nothing on its own. It is UNVERIFIED, it is labelled as
+//     such everywhere it is shown, and its review is excluded from the verified
+//     average. Claiming is cheap; being believed is not.
+//  2. Only the property's owner or an admin can confirm, and the claimant can
+//     never confirm their own — enforced by the query scope, not by a role check
+//     (see residence.service.ts).
+//  3. `corroboratedByInspectionId` records a COMPLETED viewing by the same
+//     person on the same property, if one exists. That is the platform's own
+//     evidence that they physically turned up, and it is the strongest signal
+//     available without asking for a tenancy agreement. It is shown to the owner
+//     when they decide, and it is set by the server — never sent by a client.
+//  4. Outstanding claims are capped per account, so a bad actor cannot spray a
+//     claim across the whole catalogue and hope some landlords click yes.
+//
+// What this does NOT claim: an owner can confirm a claim that is false, whether
+// out of carelessness or collusion with a fake reviewer. Making that impossible
+// needs documents we do not ask for. What is achieved is that a false confirmed
+// claim requires the owner's participation and leaves their name on it.
+model ResidenceHistory {
+  id         String          @id @default(cuid())
+  userId     String
+  propertyId String
+  status     ResidenceStatus @default(UNVERIFIED)
+
+  // The tenancy, as calendar dates — nobody remembers the hour they moved in.
+  movedInAt  DateTime  @db.Date
+  // Null means "still living here". A review can still be written: someone six
+  // months into a tenancy knows about the water supply.
+  movedOutAt DateTime? @db.Date
+
+  // The claimant's own words, for the owner reading the claim ("flat 3, upstairs
+  // — you may remember my brother helped me move in").
+  note String?
+
+  // Set by the SERVER when a COMPLETED inspection by this person on this
+  // property exists. Never accepted from a request body: it is the one piece of
+  // independent evidence here, so a client that could set it would be able to
+  // manufacture its own corroboration.
+  corroboratedByInspectionId String?
+
+  // The decision.
+  confirmedById String?
+  decidedAt     DateTime?
+  // Why, in the decider's words. Required by the service when rejecting: the
+  // claimant is shown this, and "Rejected" alone tells them nothing about
+  // whether they got the address wrong or are suspected of lying.
+  decisionReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user        User        @relation("ResidenceClaims", fields: [userId], references: [id], onDelete: Cascade)
+  property    Property    @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  confirmedBy User?       @relation("ResidenceDecisions", fields: [confirmedById], references: [id], onDelete: SetNull)
+  corroboratedBy Inspection? @relation(fields: [corroboratedByInspectionId], references: [id], onDelete: SetNull)
+  review      PropertyReview?
+
+  // The same person, the same property, the same move-in date is one claim
+  // submitted twice — not a second tenancy. Scoped this way rather than to
+  // (userId, propertyId) because living somewhere twice years apart is a real
+  // thing that happens, and each stay is its own reviewable period.
+  @@unique([userId, propertyId, movedInAt])
+  // The claimant's own list.
+  @@index([userId, createdAt])
+  // The owner's queue, and the review reader's "is this claim confirmed" lookup.
+  @@index([propertyId, status])
+}
+
+// Whether a review is visible, and why not if it is not.
+//
+// PUBLISHED is the normal state. HIDDEN is an admin taking a review out of
+// public view after a report — the row survives so the decision is auditable and
+// so the author is not silently censored. REMOVED is the author withdrawing
+// their own.
+enum ReviewStatus {
+  PUBLISHED
+  HIDDEN
+  REMOVED
+}
+
+// What it was actually like to live there.
+//
+// One review per residence period — `residenceId` is unique, so the schema makes
+// a second one impossible rather than trusting a check. Someone who lived
+// somewhere twice gets two claims and therefore two reviews, which is right:
+// the flat may genuinely have been better the second time.
+//
+// TRUST. A review is `verified` when its residence claim is CONFIRMED, and that
+// is DERIVED at read time from the claim's current status rather than stored
+// here. Deliberate: confirming a claim promotes its review automatically, and
+// rejecting one demotes it, with no denormalized copy to drift. A stored flag
+// would eventually say "verified" about a claim that had since been rejected —
+// which is the exact thing the brief forbids.
+//
+// Ratings are 1-5 on the dimensions that decide whether a Nigerian student flat
+// is liveable. They are separate rather than a single score because "the
+// landlord is unreachable but the borehole never fails" is a real and useful
+// thing to be able to say, and an average of the two tells nobody anything.
+model PropertyReview {
+  id          String       @id @default(cuid())
+  // Unique: the one-review-per-tenancy rule, in the database.
+  residenceId String       @unique
+  // Denormalized from the residence so "reviews for this listing" is one index
+  // hit rather than a join through claims. The service always copies it from the
+  // residence and never from the request.
+  propertyId  String
+  authorId    String
+  status      ReviewStatus @default(PUBLISHED)
+
+  overall  Int
+  water    Int
+  power    Int
+  security Int
+  // How the landlord actually behaved — the thing no listing photo shows.
+  landlord Int
+
+  // Required, and with a floor in the schemas: a rating with no words is a score,
+  // and the point of this feature is the sentence a student writes about the
+  // water going off in Harmattan.
+  body String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  residence ResidenceHistory @relation(fields: [residenceId], references: [id], onDelete: Cascade)
+  property  Property         @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  author    User             @relation("ReviewsWritten", fields: [authorId], references: [id], onDelete: Cascade)
+  reports   ReviewReport[]
+
+  // The listing page's read: this property's visible reviews, newest first.
+  @@index([propertyId, status, createdAt])
+  @@index([authorId])
+}
+
+// Someone flagging a review.
+//
+// Kept as rows rather than a counter on the review, because "who reported this
+// and what did they say" is what an admin needs in order to act, and a number
+// only says how many people were annoyed. One report per person per review, so a
+// landlord cannot manufacture a pile of reports by clicking repeatedly.
+//
+// Reporting does NOT hide a review. Nothing about this table changes what the
+// public sees — an admin has to decide. A landlord who could bury a bad review
+// by reporting it would make the whole review system worthless.
+model ReviewReport {
+  id         String   @id @default(cuid())
+  reviewId   String
+  reporterId String
+  reason     String
+  // Set when an admin has looked at it, so the queue can show what is
+  // outstanding without deleting the ones that were handled.
+  resolvedAt DateTime?
+  createdAt  DateTime @default(now())
+
+  review   PropertyReview @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  reporter User           @relation("ReviewReports", fields: [reporterId], references: [id], onDelete: Cascade)
+
+  @@unique([reviewId, reporterId])
+  // The admin queue: outstanding reports, oldest first.
+  @@index([resolvedAt, createdAt])
 }
 
 // Deferred domains (messaging, notifications, wallet, media assets) are
