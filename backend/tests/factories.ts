@@ -4,8 +4,10 @@ import type {
   PasswordResetToken,
   Property,
   PropertyImage,
+  PropertyReview,
   PropertyVerification,
   ResidenceHistory,
+  ReviewReport,
   Session,
 } from "@prisma/client";
 
@@ -288,6 +290,94 @@ export function makeResidence(overrides: Partial<ResidenceRow> = {}): ResidenceR
     property: RESIDENCE_LISTING,
     user: RESIDENCE_CLAIMANT,
     review: null,
+    ...overrides,
+  };
+}
+
+/**
+ * The period and status a review's `include` selects off its residence.
+ *
+ * Typed as the `Pick` rather than inferred from the literal, so `status` widens to
+ * the enum and a test can override it with UNVERIFIED — the labelled-but-uncounted
+ * case, which is what most of the trust assertions are about. Inferring would pin it
+ * to `"CONFIRMED"` and make exactly that override a type error.
+ */
+const REVIEWED_PERIOD: Pick<ResidenceHistory, "status" | "movedInAt" | "movedOutAt"> = {
+  status: "CONFIRMED",
+  movedInAt: new Date("2024-09-01T00:00:00.000Z"),
+  movedOutAt: new Date("2025-08-31T00:00:00.000Z"),
+};
+
+/** The author summary. Serialized to "Ada S." publicly — never the full name. */
+const REVIEW_AUTHOR = {
+  id: "usr_mover",
+  firstName: "Ada",
+  lastName: "Student",
+};
+
+type ReviewRow = PropertyReview & {
+  residence: typeof REVIEWED_PERIOD;
+  author: typeof REVIEW_AUTHOR;
+  property: typeof RESIDENCE_LISTING;
+};
+
+/**
+ * A published review with every relation a serializer might select.
+ *
+ * CONFIRMED residence by default, so the default row is a VERIFIED review — the
+ * case that counts towards the average. Pass `residence: { ...status: "UNVERIFIED" }`
+ * for the labelled-but-uncounted case, which is the one most of the trust
+ * assertions are about.
+ *
+ * `createdAt` and `updatedAt` are identical, so `edited` is false by default. A
+ * test for the edited marker has to move `updatedAt` deliberately, which is the
+ * point: the marker exists to tell a reader the text changed after publication.
+ */
+export function makeReview(overrides: Partial<ReviewRow> = {}): ReviewRow {
+  const now = new Date("2026-02-01T00:00:00.000Z");
+  return {
+    id: "rev_test_1",
+    residenceId: "res_test_1",
+    propertyId: "prop_test_1",
+    authorId: "usr_mover",
+    status: "PUBLISHED",
+    overall: 4,
+    water: 5,
+    power: 2,
+    security: 4,
+    landlord: 3,
+    body: "Water never once went off, but be ready for the power. The landlord answered calls.",
+    createdAt: now,
+    updatedAt: now,
+    residence: REVIEWED_PERIOD,
+    author: REVIEW_AUTHOR,
+    property: RESIDENCE_LISTING,
+    ...overrides,
+  };
+}
+
+type ReportRow = ReviewReport & {
+  reporter: typeof REVIEW_AUTHOR;
+  review: ReviewRow;
+};
+
+/**
+ * An outstanding report, as the admin queue's `include` returns it.
+ *
+ * `resolvedAt: null` — the state a queue shows. The reporter is a different account
+ * from the review's author, because reporting your own review is refused and a
+ * fixture that modelled it would be modelling a row the service cannot create.
+ */
+export function makeReviewReport(overrides: Partial<ReportRow> = {}): ReportRow {
+  return {
+    id: "rrep_test_1",
+    reviewId: "rev_test_1",
+    reporterId: "usr_landlord",
+    reason: "I have never let this flat to anybody by that name and the dates are wrong.",
+    resolvedAt: null,
+    createdAt: new Date("2026-02-05T00:00:00.000Z"),
+    reporter: { id: "usr_landlord", firstName: "Bola", lastName: "Owner" },
+    review: makeReview(),
     ...overrides,
   };
 }

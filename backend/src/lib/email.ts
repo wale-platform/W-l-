@@ -356,3 +356,43 @@ export function sendResidenceDecisionEmail(args: {
     text,
   });
 }
+
+/**
+ * Tell a property owner that a former resident has reviewed their place.
+ *
+ * This email exists for one reason: reporting a fake review is the safeguard on
+ * the whole review system, and a safeguard nobody knows to reach for is not one.
+ * A landlord who never finds out about a review cannot report it.
+ *
+ * It carries no name and not one word of the review body. Both are on the listing
+ * page, where the owner can read the review in the context of the reply and report
+ * controls that sit beside it — and where a forwarded email cannot take an
+ * accusation out of that context. What the email carries is the overall score and
+ * whether the tenancy was one they confirmed, which is enough to decide whether to
+ * look now or later.
+ */
+export function sendReviewPostedEmail(args: {
+  to: string;
+  title: string;
+  overall: number;
+  verified: boolean;
+  propertyUrl: string;
+}): Promise<void> {
+  const { to, title, overall, verified, propertyUrl } = args;
+
+  const text = [
+    `Someone who lived at "${title}" has written a review.`,
+    "",
+    `Overall rating: ${overall} out of 5`,
+    verified
+      ? "They are a resident whose tenancy you confirmed, so the review counts towards the property's verified rating."
+      : "Their residence claim has not been confirmed, so the review is labelled unverified and is not counted in the property's rating.",
+    "",
+    "Read it here:",
+    propertyUrl,
+    "",
+    "If you believe a review is fake or breaks the rules, report it from that page and an admin will look at it. Reporting does not hide a review.",
+  ].join("\n");
+
+  return sendMail({ to, subject: `New review: ${title}`, text });
+}

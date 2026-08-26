@@ -42,6 +42,14 @@ const PUBLICLY_LISTABLE: PropertyStatus[] = [
   PropertyStatus.PENDING_VERIFICATION,
 ];
 
+/**
+ * Exported for the review domain, which must answer "is this listing public"
+ * exactly the way `getPropertyById` does. Reviews are read on the listing page,
+ * so if the page is a 404 its review list has to be one too — and that is only
+ * true for as long as both use this same list. Hence one constant, not two.
+ */
+export { PUBLICLY_LISTABLE };
+
 /** A listing can be (re)submitted for review from these states only. */
 const SUBMITTABLE: PropertyStatus[] = [PropertyStatus.DRAFT, PropertyStatus.REJECTED];
 
