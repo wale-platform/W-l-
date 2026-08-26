@@ -5,6 +5,7 @@ import {
   Flag,
   History,
   Home,
+  MessageSquareWarning,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -64,6 +65,14 @@ const AREAS: Area[] = [
     ready: true,
   },
   {
+    href: "/admin/reviews",
+    title: "Reported reviews",
+    description:
+      "Somebody objected to a review. Read it, then hide, remove, or leave it up — reporting it changed nothing on its own.",
+    icon: MessageSquareWarning,
+    ready: true,
+  },
+  {
     href: "/admin/listings",
     title: "All listings",
     description: "Not wired up yet — use Review listings, which reads the real queue.",
@@ -81,7 +90,8 @@ const AREAS: Area[] = [
   {
     href: "/admin/reports",
     title: "Reports",
-    description: "Not wired up yet.",
+    description:
+      "Not wired up yet — this was meant for platform statistics. Complaints about reviews are under Reported reviews.",
     icon: Flag,
     ready: false,
   },
