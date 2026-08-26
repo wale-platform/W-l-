@@ -408,7 +408,11 @@ async function decide(
         // On a confirmation this is where they go to write the review they have
         // just become entitled to; on a rejection it is where they check what
         // they got wrong.
-        historyUrl: `${frontendBaseUrl}/mover/residences`,
+        // `/tenant`, not `/mover`: the frontend routes both roles to the same
+        // dashboard area (`roleHomePath.MOVER === "/tenant"`), because an
+        // outgoing tenant documenting where they lived is the same person one
+        // step further along. There is no `/mover` route to send them to.
+        historyUrl: `${frontendBaseUrl}/tenant/residences`,
       }),
     );
   }

@@ -3,6 +3,7 @@ import {
   CalendarClock,
   ClipboardCheck,
   Flag,
+  History,
   Home,
   Users,
   type LucideIcon,
@@ -52,6 +53,14 @@ const AREAS: Area[] = [
     description:
       "Every request across the platform, soonest first. You can answer one as the landlord would.",
     icon: CalendarClock,
+    ready: true,
+  },
+  {
+    href: "/admin/residences",
+    title: "Residence claims",
+    description:
+      "Every claim to have lived somewhere. Confirming one lets that person publish a review that counts towards a property's rating.",
+    icon: History,
     ready: true,
   },
   {

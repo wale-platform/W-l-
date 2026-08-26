@@ -85,6 +85,11 @@ export default async function LandlordDashboard() {
                     Inspection Requests
                   </Button>
                 </Link>
+              <Link href="/landlord/residences">
+                  <Button tone="outline">
+                    Residence Claims
+                  </Button>
+                </Link>
               </div>
             </CardBody>
           </Card>

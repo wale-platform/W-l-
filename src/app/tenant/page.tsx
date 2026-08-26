@@ -36,6 +36,10 @@ export default async function TenantDashboardPage() {
               <Button>My viewings</Button>
             </Link>
 
+            <Link href="/tenant/residences">
+              <Button tone="outline">Places I&apos;ve lived</Button>
+            </Link>
+
             <Link href="/properties">
               <Button tone="outline">Browse homes</Button>
             </Link>
@@ -61,6 +65,24 @@ export default async function TenantDashboardPage() {
                 <Link href="/tenant/inspections" className="w-fit">
                   <Button size="sm" tone="outline">
                     See your viewings
+                  </Button>
+                </Link>
+              </CardBody>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Places you&apos;ve lived</CardTitle>
+              </CardHeader>
+              <CardBody className="flex flex-col gap-3">
+                <p className="text-sm text-ink-500">
+                  Record a place you rented. Once its landlord confirms you lived
+                  there, you can review it — and your rating counts towards what
+                  other students see.
+                </p>
+                <Link href="/tenant/residences" className="w-fit">
+                  <Button size="sm" tone="outline">
+                    Your residence history
                   </Button>
                 </Link>
               </CardBody>

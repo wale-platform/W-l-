@@ -848,6 +848,236 @@ export const inspectionDecisionSchema = z
 
 export type InspectionDecision = z.infer<typeof inspectionDecisionSchema>;
 
+/* --------------------------------------------------------- Residences -- */
+
+/**
+ * Where a residence claim has got to (Prisma `ResidenceStatus`).
+ *
+ * Three states and no more. UNVERIFIED is the only one a claim can be created in,
+ * and the only one the claimant can still withdraw from.
+ */
+export const residenceStatusSchema = z.enum(["UNVERIFIED", "CONFIRMED", "REJECTED"]);
+
+export type ResidenceStatus = z.infer<typeof residenceStatusSchema>;
+
+/**
+ * How each state reads.
+ *
+ * "Awaiting the landlord" rather than "Unverified" for UNVERIFIED, because the word
+ * a claimant needs is what is happening, not the column's name. The tone is
+ * `warning` rather than `danger`: an unconfirmed claim is not a rejected one, and
+ * the review written from it is published — labelled, and excluded from the
+ * verified average, but published.
+ */
+export const residenceStatusCopy: Record<
+  ResidenceStatus,
+  { label: string; tone: "neutral" | "warning" | "success" | "danger" }
+> = {
+  UNVERIFIED: { label: "Awaiting the landlord", tone: "warning" },
+  CONFIRMED: { label: "Confirmed", tone: "success" },
+  REJECTED: { label: "Not accepted", tone: "danger" },
+};
+
+/**
+ * Just enough of the listing to recognise which flat this was.
+ *
+ * No `price`, unlike `inspectionListingSchema`. A residence claim is about the
+ * past; what the place costs today is somebody else's business and the server does
+ * not send it.
+ */
+const residenceListingSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  address: z.string(),
+  city: z.string(),
+  state: z.string(),
+  image: z.string().optional(),
+});
+
+/**
+ * A claim as the person who made it sees it.
+ *
+ * `movedOutAt` absent means "still living there" — a real answer, and one that
+ * still entitles them to review the place.
+ *
+ * `verified` is the server's `status === "CONFIRMED"`, recomputed on every read
+ * rather than stored, so it can never say "verified" about a claim that has since
+ * been rejected. Read it; never re-derive it from something else here.
+ */
+export const residenceSchema = z.object({
+  id: z.string(),
+  status: residenceStatusSchema,
+  verified: z.boolean(),
+  movedInAt: z.string(),
+  movedOutAt: z.string().optional(),
+  note: z.string().optional(),
+  /** The owner's words when they refused. Shown to the claimant verbatim. */
+  decisionReason: z.string().optional(),
+  decidedAt: z.string().optional(),
+  createdAt: z.string(),
+  property: residenceListingSchema,
+  /** Whether a review has been written for this period yet. Decides the button. */
+  hasReview: z.boolean(),
+});
+
+export type Residence = z.infer<typeof residenceSchema>;
+
+/**
+ * The same claim as the property's owner sees it, with who is claiming.
+ *
+ * No phone number and no email, deliberately, and unlike a confirmed viewing
+ * request. The owner is answering "do I recognise this person and these dates",
+ * which a name, a period and a note answer completely — so the server sends no way
+ * to contact them and this schema has no field to put one in.
+ *
+ * `corroborated` is true when the platform holds a COMPLETED viewing by this person
+ * on this property: real evidence they physically turned up. It is a snapshot taken
+ * when the claim was made, so a viewing marked as done afterwards will not appear.
+ */
+export const ownerResidenceSchema = residenceSchema.extend({
+  claimant: z.object({ id: z.string(), name: z.string() }),
+  corroborated: z.boolean(),
+});
+
+export type OwnerResidence = z.infer<typeof ownerResidenceSchema>;
+
+export const residenceListResponseSchema = z.object({
+  residences: z.array(residenceSchema),
+  total: z.number().int(),
+  page: z.number().int(),
+  pageSize: z.number().int(),
+  totalPages: z.number().int(),
+});
+
+export type ResidenceListResponse = z.infer<typeof residenceListResponseSchema>;
+
+export const ownerResidenceListResponseSchema = residenceListResponseSchema.extend({
+  residences: z.array(ownerResidenceSchema),
+});
+
+export type OwnerResidenceListResponse = z.infer<typeof ownerResidenceListResponseSchema>;
+
+export const residenceListParamsSchema = z.object({
+  status: residenceStatusSchema.optional(),
+  page: z.number().int().min(1).default(1),
+  pageSize: z.number().int().min(1).max(50).default(20),
+});
+
+export type ResidenceListParams = z.infer<typeof residenceListParamsSchema>;
+
+/**
+ * What a claimant sends to record a place they lived, mirroring
+ * `backend/src/modules/residences/residence.schemas.ts`.
+ *
+ * Calendar dates, not timestamps: nobody remembers the hour they moved in, and a
+ * timestamp would buy a timezone bug in exchange for precision the underlying fact
+ * does not have.
+ *
+ * The bounds are the server's, restated so a typo'd year lands on the field rather
+ * than coming back as a 422. An empty `movedOutAt` is how "still living here" is
+ * spelled, so the field transforms blank to `undefined` — sending `""` would be a
+ * second spelling of the same thing.
+ */
+const CLAIM_EARLIEST_YEARS = 30;
+
+/** Today at UTC midnight, matching how the server parses `YYYY-MM-DD`. */
+function todayUtcDate(): Date {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+}
+
+/** A `YYYY-MM-DD` string as the UTC-midnight instant the server will read it as. */
+function parseDateOnly(value: string): Date | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  // Round-trip, so "2025-02-31" is rejected rather than silently becoming March.
+  return Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value
+    ? null
+    : parsed;
+}
+
+const claimDate = z
+  .string()
+  .trim()
+  .refine((v) => parseDateOnly(v) !== null, { message: "Use the date picker" });
+
+export const createResidenceSchema = z
+  .object({
+    propertyId: z.string().min(1, "Choose which place you lived in"),
+    movedInAt: claimDate,
+    movedOutAt: claimDate.optional().or(z.literal("")).transform((v) => (v ? v : undefined)),
+    note: z
+      .string()
+      .trim()
+      .max(500, "Keep this under 500 characters")
+      .optional()
+      .transform((v) => (v ? v : undefined)),
+  })
+  .superRefine((body, ctx) => {
+    const movedIn = parseDateOnly(body.movedInAt);
+    if (!movedIn) return;
+    const today = todayUtcDate();
+
+    if (movedIn > today) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["movedInAt"],
+        message: "This is your residence history — pick a date you have already moved in on",
+      });
+    }
+
+    const earliest = new Date(today);
+    earliest.setUTCFullYear(earliest.getUTCFullYear() - CLAIM_EARLIEST_YEARS);
+    if (movedIn < earliest) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["movedInAt"],
+        message: `Pick a date within the last ${CLAIM_EARLIEST_YEARS} years`,
+      });
+    }
+
+    const movedOut = body.movedOutAt ? parseDateOnly(body.movedOutAt) : null;
+    if (!movedOut) return;
+
+    if (movedOut < movedIn) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["movedOutAt"],
+        message: "You cannot have moved out before you moved in",
+      });
+    }
+    if (movedOut > today) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["movedOutAt"],
+        message: "Leave this empty if you still live here",
+      });
+    }
+  });
+
+/** What the form holds. `movedOutAt` is `""` while empty; the schema drops it. */
+export type CreateResidenceInput = z.input<typeof createResidenceSchema>;
+
+/**
+ * The owner's refusal, in their own words.
+ *
+ * Required, with a floor, because the claimant reads it verbatim and "Rejected" on
+ * its own does not tell them whether they picked the wrong listing off a search
+ * page or are being accused of making it up.
+ *
+ * Confirming has no schema at all — it takes no body. The asymmetry is the rule, so
+ * it is two shapes rather than one with a status field.
+ */
+export const rejectResidenceSchema = z.object({
+  reason: z
+    .string()
+    .trim()
+    .min(10, "Say why — the person who made this claim sees this word for word")
+    .max(1000, "Keep this under 1000 characters"),
+});
+
+export type RejectResidenceInput = z.infer<typeof rejectResidenceSchema>;
+
 /* ------------------------------------------------------------- Media -- */
 
 /**

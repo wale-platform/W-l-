@@ -43,6 +43,43 @@ export function formatDateTime(iso: string): string {
 }
 
 /**
+ * A `YYYY-MM-DD` calendar date, formatted without moving it.
+ *
+ * `formatDate` cannot be used for these. `new Date("2024-09-01")` is UTC midnight,
+ * and rendering that in a UTC-negative timezone shows 31 August — so somebody's
+ * move-in date would be off by a day depending on where they read it from. A
+ * calendar date has no time and no offset (the server slices it straight out of the
+ * ISO string for the same reason), so it is formatted in UTC and stays the day it
+ * was.
+ */
+export function formatDateOnly(date: string): string {
+  return new Intl.DateTimeFormat("en-NG", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(`${date.slice(0, 10)}T00:00:00.000Z`));
+}
+
+/**
+ * Just the month and year — "September 2024".
+ *
+ * How a tenancy is actually remembered and described: nobody says "I moved in on
+ * the 1st of September", they say "I was there from September". Accepts both
+ * `YYYY-MM-DD` (a residence claim's dates) and `YYYY-MM` (the period a public
+ * review carries, deliberately coarsened so a reader cannot pin down the exact day
+ * somebody moved into a flat), so the two read identically on the page.
+ */
+export function formatMonthYear(value: string): string {
+  const day = value.length === 7 ? `${value}-01` : value.slice(0, 10);
+  return new Intl.DateTimeFormat("en-NG", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(`${day}T00:00:00.000Z`));
+}
+
+/**
  * A `datetime-local` input's value for a given instant, in LOCAL time.
  *
  * `toISOString()` cannot be used for this: it converts to UTC, so a Nigerian
