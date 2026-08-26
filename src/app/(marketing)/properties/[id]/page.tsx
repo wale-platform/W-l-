@@ -14,6 +14,7 @@ import { Container, Section } from "@/components/layout/Container";
 import { InspectionRequest } from "@/components/property/InspectionRequest";
 import { PropertyContact } from "@/components/property/PropertyContact";
 import { PropertyGallery } from "@/components/property/PropertyGallery";
+import { PropertyReviews } from "@/components/reviews/PropertyReviews";
 import { Badge, Breadcrumbs, Card, CardBody } from "@/components/ui";
 import { siteConfig } from "@/config/site";
 import { getPublicProperty } from "@/lib/api/server-property";
@@ -194,6 +195,11 @@ export default async function PropertyDetailPage({ params }: Props) {
                 </ul>
               </section>
             )}
+
+            {/* Last in the column, and the only part of it the landlord did not
+                write. Client-rendered because it is paginated, filterable and
+                session-aware — see the component. */}
+            <PropertyReviews propertyId={property.id} />
           </div>
 
           {/* Sticky on a wide screen so the rent and the phone number stay put

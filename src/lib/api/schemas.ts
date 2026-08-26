@@ -1078,6 +1078,371 @@ export const rejectResidenceSchema = z.object({
 
 export type RejectResidenceInput = z.infer<typeof rejectResidenceSchema>;
 
+/* ------------------------------------------- Lived-experience reviews -- */
+
+/**
+ * What it was actually like to live somewhere.
+ *
+ * Not to be confused with the "Review & audit" section above, which is an admin
+ * reviewing a LISTING. This is a former tenant reviewing a HOME, and the two share
+ * only the English word — hence `reviewListParamsSchema` here and
+ * `reviewQueueParamsSchema` there.
+ *
+ * The rule the whole domain hangs off: a review belongs to a residence claim, and
+ * only a claim the property's owner CONFIRMED counts towards the property's rating.
+ * An unconfirmed claim still gets a voice — published, labelled, and excluded from
+ * the average — because the person who decides whether to confirm is the person
+ * being reviewed, and silence would be their mute button.
+ */
+
+/** Where a review stands with moderation (Prisma `ReviewStatus`). */
+export const reviewStatusSchema = z.enum(["PUBLISHED", "HIDDEN", "REMOVED"]);
+
+export type ReviewStatus = z.infer<typeof reviewStatusSchema>;
+
+/**
+ * How each state reads to the person who wrote it.
+ *
+ * Only ever shown to the author — a stranger never sees a hidden review at all, so
+ * there is no public use for this map. PUBLISHED is `success` rather than `neutral`
+ * because it appears beside the other two, where "your review is up" is the reassuring
+ * answer and not the boring one.
+ */
+export const reviewStatusCopy: Record<
+  ReviewStatus,
+  { label: string; tone: "success" | "warning" | "danger" }
+> = {
+  PUBLISHED: { label: "Published", tone: "success" },
+  HIDDEN: { label: "Hidden by an admin", tone: "warning" },
+  REMOVED: { label: "Taken down", tone: "danger" },
+};
+
+/** The five scores, all 1–5. Never averaged in the browser — see `ExperienceSummary`. */
+export const reviewRatingsSchema = z.object({
+  overall: z.number().int(),
+  water: z.number().int(),
+  power: z.number().int(),
+  security: z.number().int(),
+  landlord: z.number().int(),
+});
+
+export type ReviewRatings = z.infer<typeof reviewRatingsSchema>;
+
+export type RatingKey = keyof ReviewRatings;
+
+/**
+ * The five things somebody is asked to score, in the order they are asked.
+ *
+ * Overall first because it is the one people arrive with an answer to; the other four
+ * are the ones a listing page cannot tell you and a landlord will not. The prompts
+ * name the actual Nigerian failure modes — a form that asks about "utilities" gets
+ * three stars and no information.
+ */
+export const RATING_CRITERIA: readonly { key: RatingKey; label: string; hint: string }[] = [
+  { key: "overall", label: "Overall", hint: "Living there, all things considered" },
+  { key: "water", label: "Water", hint: "Did the taps actually run?" },
+  { key: "power", label: "Power", hint: "How often it was off, and whether there was a generator" },
+  { key: "security", label: "Security", hint: "The gate, the fence, walking in at night" },
+  { key: "landlord", label: "Landlord", hint: "Repairs, and what happened to your deposit" },
+];
+
+/**
+ * A review as a stranger reads it, deciding whether to rent the place.
+ *
+ * `author.name` is a first name and a last initial, and there is NO author id — both
+ * on purpose, on the server. A review says where somebody lived and roughly when;
+ * a full name beside that publishes their address history, and a stable id would let
+ * anyone group every review by the same person and reconstruct the rest of it.
+ * `residedFrom`/`residedTo` are `YYYY-MM` for the same reason: a reader needs to know
+ * how recent the experience is, not the day of the month.
+ *
+ * `mine` is the server comparing the session to the author. It is how the page knows
+ * not to offer somebody a "report" button on their own words, and it is the only
+ * thing a session changes about this response.
+ */
+export const publicReviewSchema = z.object({
+  id: z.string(),
+  /** The residence claim behind it is CONFIRMED. Read off the response, never derived. */
+  verified: z.boolean(),
+  ratings: reviewRatingsSchema,
+  body: z.string(),
+  author: z.object({ name: z.string() }),
+  /** `YYYY-MM`. Use `formatMonthYear`, not `formatDate`. */
+  residedFrom: z.string(),
+  /** Absent means they still live there. */
+  residedTo: z.string().optional(),
+  createdAt: z.string(),
+  edited: z.boolean(),
+  mine: z.boolean(),
+});
+
+export type PublicReview = z.infer<typeof publicReviewSchema>;
+
+/**
+ * The author's own copy: their full text back to edit, and its moderation state.
+ *
+ * `property` is the same shape as a residence claim's listing summary, and reuses the
+ * same schema deliberately — a review and the claim it hangs off describe the same
+ * flat, and two definitions of "just enough of the property" would drift.
+ *
+ * Dates are full `YYYY-MM-DD` here. It is their own tenancy; nothing is being
+ * protected from them.
+ */
+export const myReviewSchema = z.object({
+  id: z.string(),
+  /** Which tenancy this is a review of. One review per claim, enforced in the database. */
+  residenceId: z.string(),
+  status: reviewStatusSchema,
+  verified: z.boolean(),
+  ratings: reviewRatingsSchema,
+  body: z.string(),
+  residedFrom: z.string(),
+  residedTo: z.string().optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  property: residenceListingSchema,
+});
+
+export type MyReview = z.infer<typeof myReviewSchema>;
+
+/**
+ * A complaint about a review, as the admin deciding on it sees it.
+ *
+ * The only shape in this domain that carries account ids and full names, because
+ * acting on an account needs to know whose. `resolvedAt` present means somebody has
+ * already decided — the queue is auditable after the fact, not emptied.
+ */
+export const reportedReviewSchema = z.object({
+  reportId: z.string(),
+  reason: z.string(),
+  reportedAt: z.string(),
+  resolvedAt: z.string().optional(),
+  reporter: z.object({ id: z.string(), name: z.string() }),
+  review: z.object({
+    id: z.string(),
+    status: reviewStatusSchema,
+    verified: z.boolean(),
+    ratings: reviewRatingsSchema,
+    body: z.string(),
+    createdAt: z.string(),
+    author: z.object({ id: z.string(), name: z.string() }),
+    property: residenceListingSchema,
+  }),
+});
+
+export type ReportedReview = z.infer<typeof reportedReviewSchema>;
+
+export const publicReviewListResponseSchema = z.object({
+  reviews: z.array(publicReviewSchema),
+  total: z.number().int(),
+  page: z.number().int(),
+  pageSize: z.number().int(),
+  totalPages: z.number().int(),
+});
+
+export type PublicReviewListResponse = z.infer<typeof publicReviewListResponseSchema>;
+
+export const myReviewListResponseSchema = publicReviewListResponseSchema.extend({
+  reviews: z.array(myReviewSchema),
+});
+
+export type MyReviewListResponse = z.infer<typeof myReviewListResponseSchema>;
+
+export const reportedReviewListResponseSchema = publicReviewListResponseSchema.extend({
+  reviews: z.array(reportedReviewSchema),
+});
+
+export type ReportedReviewListResponse = z.infer<typeof reportedReviewListResponseSchema>;
+
+/**
+ * The aggregate above a listing's reviews.
+ *
+ * `verified.averages` is NULL when the count is zero, and that nullability is the
+ * most important thing in this section. A zero would render as one star out of five —
+ * a rating invented about somebody's home because nobody had reviewed it yet. Every
+ * consumer has to handle the null; none of them may substitute a number for it.
+ *
+ * Three separate figures rather than one, because they answer different questions:
+ * the average is over confirmed tenancies only, `unverifiedCount` is how many voices
+ * exist that the average deliberately excludes, and `residents` is how many people
+ * the owner has confirmed lived there at all — reviewed or not.
+ */
+export const experienceAveragesSchema = z.object({
+  overall: z.number(),
+  water: z.number(),
+  power: z.number(),
+  security: z.number(),
+  landlord: z.number(),
+});
+
+export type ExperienceAverages = z.infer<typeof experienceAveragesSchema>;
+
+export const experienceSummarySchema = z.object({
+  propertyId: z.string(),
+  verified: z.object({
+    count: z.number().int(),
+    /** Null at zero reviews. Not a number. */
+    averages: experienceAveragesSchema.nullable(),
+  }),
+  unverifiedCount: z.number().int(),
+  residents: z.number().int(),
+});
+
+export type ExperienceSummary = z.infer<typeof experienceSummarySchema>;
+
+/**
+ * The public list's query.
+ *
+ * `verifiedOnly` defaults to false, matching the server: showing only confirmed
+ * reviews is a reader's choice to make, never the platform's default, because the
+ * confirming is done by the person being reviewed.
+ */
+export const reviewListParamsSchema = z.object({
+  page: z.number().int().min(1).default(1),
+  pageSize: z.number().int().min(1).max(50).default(10),
+  verifiedOnly: z.boolean().default(false),
+});
+
+export type ReviewListParams = z.infer<typeof reviewListParamsSchema>;
+
+/** The admin report queue's query. `resolved: true` is the audit view. */
+export const reportListParamsSchema = z.object({
+  page: z.number().int().min(1).default(1),
+  pageSize: z.number().int().min(1).max(50).default(20),
+  resolved: z.boolean().default(false),
+});
+
+export type ReportListParams = z.infer<typeof reportListParamsSchema>;
+
+/**
+ * One score, 1–5.
+ *
+ * Plain `z.number()` rather than the server's `z.coerce.number()`: the star control
+ * hands over a real number and JSON carries it as one, so there is nothing to coerce.
+ * The server coerces because a form-encoded client would send `"4"`.
+ *
+ * `required_error` matters more than it looks — an unpicked rating is `undefined`, and
+ * without it the form would say "Required" instead of naming what to rate.
+ */
+function rating(what: string) {
+  const message = `Rate ${what} from 1 to 5`;
+  return z
+    .number({ required_error: message, invalid_type_error: message })
+    .int(message)
+    .min(1, message)
+    .max(5, message);
+}
+
+/**
+ * How much someone has to write: the server's floor, restated.
+ *
+ * Five stars and the word "good" is a score, and the five ratings already carry the
+ * score. Thirty characters is about one clause — enough that "Water is fine, power is
+ * not" passes and a blank-eyed five stars does not.
+ */
+const REVIEW_BODY_MIN = 30;
+const REVIEW_BODY_MAX = 2000;
+
+const reviewBody = z
+  .string()
+  .trim()
+  .min(REVIEW_BODY_MIN, "Tell people what living there was actually like — a sentence or two")
+  .max(REVIEW_BODY_MAX, `Keep it under ${REVIEW_BODY_MAX} characters`);
+
+const reviewRatingFields = {
+  overall: rating("your overall experience"),
+  water: rating("the water supply"),
+  power: rating("the power supply"),
+  security: rating("security"),
+  landlord: rating("the landlord"),
+};
+
+/**
+ * Writing a review.
+ *
+ * `residenceId` and not `propertyId`: the property comes from the claim on the server,
+ * so no request gets to say which listing a review is filed against. Living somewhere
+ * twice years apart is two tenancies and two reviewable periods, which is why the
+ * caller has to name one rather than the server guessing.
+ *
+ * No `status` and no `verified`. The status is the column's default and `verified` is
+ * recomputed from the claim on every read.
+ */
+export const createReviewSchema = z.object({
+  residenceId: z.string().min(1, "Choose which tenancy this review is of"),
+  ...reviewRatingFields,
+  body: reviewBody,
+});
+
+export type CreateReviewInput = z.infer<typeof createReviewSchema>;
+
+/**
+ * The author revising their own review.
+ *
+ * Partial, so fixing a typo does not mean re-sending five ratings. No `residenceId`:
+ * a review is of one tenancy for its whole life, and moving it would silently change
+ * which property it counts towards.
+ */
+export const updateReviewSchema = z
+  .object({ ...reviewRatingFields, body: reviewBody })
+  .partial()
+  .refine((body) => Object.keys(body).length > 0, { message: "Nothing to update" });
+
+export type UpdateReviewInput = z.infer<typeof updateReviewSchema>;
+
+/**
+ * Reporting a review.
+ *
+ * A floor on the reason, because a human reads it and decides: "inappropriate" is a
+ * feeling, not a report. Reporting cannot hide a review and there is no field here
+ * that could — a landlord able to bury a bad review by reporting it would make every
+ * good rating on the platform worthless.
+ */
+export const reportReviewSchema = z.object({
+  reason: z
+    .string()
+    .trim()
+    .min(15, "Say what is wrong with it — an admin reads this and decides")
+    .max(1000, "Keep this under 1000 characters"),
+});
+
+export type ReportReviewInput = z.infer<typeof reportReviewSchema>;
+
+/** All the reporter is told: the complaint landed. Never the review's fate. */
+export const reportAcceptedSchema = z.object({ reported: z.literal(true) });
+
+/**
+ * An admin's decision on a reported review.
+ *
+ * The status is the whole decision, including "leave it up" — setting PUBLISHED on an
+ * already-published review is how a report is dismissed, which is why there is no
+ * separate dismiss call to drift out of step with this one.
+ *
+ * No body and no ratings: a moderator may take a review down and may not rewrite what
+ * somebody said. `note` is for the admin record and is logged rather than stored, so
+ * neither the author nor the public ever reads it.
+ */
+export const moderateReviewSchema = z.object({
+  status: reviewStatusSchema,
+  note: z
+    .string()
+    .trim()
+    .max(1000, "Keep this under 1000 characters")
+    .optional()
+    .transform((value) => (value ? value : undefined)),
+});
+
+export type ModerateReviewInput = z.input<typeof moderateReviewSchema>;
+
+/** What moderating answers: the new status, and how many complaints it closed. */
+export const moderationResultSchema = z.object({
+  id: z.string(),
+  status: reviewStatusSchema,
+  reportsResolved: z.number().int(),
+});
+
+export type ModerationResult = z.infer<typeof moderationResultSchema>;
+
 /* ------------------------------------------------------------- Media -- */
 
 /**

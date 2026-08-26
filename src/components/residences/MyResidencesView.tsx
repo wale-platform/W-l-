@@ -19,6 +19,11 @@ import {
 
 import { Container, Section, SectionHeading } from "@/components/layout/Container";
 import {
+  ReviewFormModal,
+  reviewTargetKey,
+  type ReviewTarget,
+} from "@/components/reviews/ReviewFormModal";
+import {
   Alert,
   Badge,
   Button,
@@ -70,9 +75,12 @@ import { formatDateOnly, formatMonthYear } from "@/lib/utils/format";
  * server would accept a claim against one by id, but there is no way to reach it
  * from here.
  *
- * A confirmed claim entitles its owner to write a review. The form for that arrives
- * with the review layer; until then this page says the entitlement exists rather
- * than offering a button that goes nowhere.
+ * The review form opens from here, and from every claim the server would accept one
+ * for — which is any claim that has not been REJECTED, not only the confirmed ones.
+ * Withholding the form until a landlord agrees would let a landlord suppress a review
+ * by never answering. What their answer decides is whether the rating counts towards
+ * the property's verified average, and the form says which of the two is happening
+ * before a word is typed.
  */
 
 const STATUS_OPTIONS = residenceStatusSchema.options;
@@ -87,6 +95,7 @@ export function MyResidencesView() {
   const [page, setPage] = useState(1);
   const [claiming, setClaiming] = useState(false);
   const [pendingWithdraw, setPendingWithdraw] = useState<Residence | null>(null);
+  const [reviewTarget, setReviewTarget] = useState<ReviewTarget | null>(null);
 
   const query = useMyResidences({ ...(status ? { status } : {}), page });
   const withdraw = useWithdrawResidence();
@@ -197,6 +206,15 @@ export function MyResidencesView() {
                   residence={residence}
                   isBusy={withdraw.isPending && withdraw.variables === residence.id}
                   onWithdraw={() => setPendingWithdraw(residence)}
+                  onReview={() =>
+                    setReviewTarget({
+                      kind: "new",
+                      propertyId: residence.property.id,
+                      propertyTitle: residence.property.title,
+                      residenceId: residence.id,
+                      verified: residence.verified,
+                    })
+                  }
                 />
               ))}
             </div>
@@ -231,6 +249,16 @@ export function MyResidencesView() {
         tone="danger"
         isLoading={withdraw.isPending}
       />
+
+      {/* Keyed by target so the form is rebuilt per claim rather than reusing the
+          state of the last one somebody opened and closed. */}
+      {reviewTarget && (
+        <ReviewFormModal
+          key={reviewTargetKey(reviewTarget)}
+          target={reviewTarget}
+          onClose={() => setReviewTarget(null)}
+        />
+      )}
     </main>
   );
 }
@@ -248,16 +276,21 @@ function ResidenceCard({
   residence,
   isBusy,
   onWithdraw,
+  onReview,
 }: {
   residence: Residence;
   isBusy: boolean;
   onWithdraw: () => void;
+  onReview: () => void;
 }) {
   const { label, tone } = residenceStatusCopy[residence.status];
   const cover = residence.property.image;
   // The only state the server will still let the claimant take back. A rejection
   // is deliberately not removable — that would be a clean slate to re-submit from.
   const withdrawable = residence.status === "UNVERIFIED";
+  // Anything the landlord has not refused. UNVERIFIED counts: a landlord who never
+  // answers must not thereby be able to stop the review being written.
+  const reviewable = residence.status !== "REJECTED" && !residence.hasReview;
 
   return (
     <Card>
@@ -334,10 +367,13 @@ function ResidenceCard({
           )}
 
           {residence.status === "UNVERIFIED" && (
-            <p className="flex items-center gap-1.5 text-xs leading-relaxed text-ink-500">
-              <Clock aria-hidden="true" className="size-3.5 shrink-0" />
-              Waiting on the landlord — they have been emailed. Listings with no
-              account behind them have nobody to confirm them.
+            <p className="flex items-start gap-1.5 text-xs leading-relaxed text-ink-500">
+              <Clock aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
+              <span>
+                Waiting on the landlord — they have been emailed. Listings with no
+                account behind them have nobody to confirm them. You can still write
+                your review now; it will be marked unconfirmed until they answer.
+              </span>
             </p>
           )}
 
@@ -368,6 +404,21 @@ function ResidenceCard({
           )}
 
           <div className="flex flex-wrap gap-2 pt-1">
+            {reviewable && (
+              <Button size="sm" onClick={onReview}>
+                <Star aria-hidden="true" className="size-3.5" />
+                Write a review
+              </Button>
+            )}
+            {/* Editing happens on the reviews page, where the review itself is —
+                this card holds a claim and does not carry the words or the scores. */}
+            {residence.hasReview && (
+              <Link href="/tenant/reviews">
+                <Button size="sm" tone="outline">
+                  Edit your review
+                </Button>
+              </Link>
+            )}
             {withdrawable && (
               <Button size="sm" tone="outline" onClick={onWithdraw} disabled={isBusy}>
                 Withdraw claim
