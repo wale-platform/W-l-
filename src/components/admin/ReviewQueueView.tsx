@@ -180,7 +180,7 @@ export function ReviewQueueView() {
   const copy = pending ? DECISIONS[pending.decision] : null;
 
   return (
-    <main>
+    <main id="main">
       <Section>
         <Container size="wide" className="flex flex-col gap-8">
           <SectionHeading

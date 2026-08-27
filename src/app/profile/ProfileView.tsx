@@ -32,7 +32,7 @@ export default function ProfilePage() {
   };
 
   return (
-    <main>
+    <main id="main">
       <Section>
         <Container size="narrow" className="flex flex-col gap-8">
           <SectionHeading

@@ -48,7 +48,7 @@ export function EditPropertyView({
 
   if (query.isPending) {
     return (
-      <main>
+      <main id="main">
         <Section>
           <Container size="narrow" className="flex flex-col gap-6" aria-busy="true">
             <Skeleton className="h-16" />
@@ -63,7 +63,7 @@ export function EditPropertyView({
     const missing = statusOf(query.error) === 404;
 
     return (
-      <main>
+      <main id="main">
         <Section>
           <Container size="narrow">
             <ErrorState
@@ -89,7 +89,7 @@ export function EditPropertyView({
   const isLive = property.status === "VERIFIED";
 
   return (
-    <main>
+    <main id="main">
       <Section>
         <Container size="narrow" className="flex flex-col gap-8">
           <SectionHeading

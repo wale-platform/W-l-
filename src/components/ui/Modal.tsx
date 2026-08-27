@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useId, useRef, type ReactNode } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { Button } from "./Button";
@@ -36,6 +36,14 @@ export function Modal({
 }) {
   const ref = useRef<HTMLDialogElement>(null);
 
+  // Per-instance ids. A page may mount several dialogs at once — a confirm
+  // beside an edit form — and every one of them renders its heading. With a
+  // hardcoded `modal-title` they would all share the id, so `aria-labelledby`
+  // would resolve to whichever appears first in the document and a screen
+  // reader could announce the wrong dialog's title.
+  const titleId = useId();
+  const descriptionId = useId();
+
   useEffect(() => {
     const dialog = ref.current;
     if (!dialog) return;
@@ -66,8 +74,8 @@ export function Modal({
   return (
     <dialog
       ref={ref}
-      aria-labelledby="modal-title"
-      aria-describedby={description ? "modal-description" : undefined}
+      aria-labelledby={titleId}
+      aria-describedby={description ? descriptionId : undefined}
       // The dialog element itself is the click target that fills the
       // viewport; clicks landing on it (rather than on the inner panel,
       // which stops propagation) mean the backdrop was hit.
@@ -88,11 +96,11 @@ export function Modal({
       >
         <div className="flex items-start justify-between gap-4 p-5 pb-3">
           <div className="flex flex-col gap-1">
-            <h2 id="modal-title" className="text-lg font-semibold text-ink-900">
+            <h2 id={titleId} className="text-lg font-semibold text-ink-900">
               {title}
             </h2>
             {description && (
-              <p id="modal-description" className="text-sm text-ink-500">
+              <p id={descriptionId} className="text-sm text-ink-500">
                 {description}
               </p>
             )}

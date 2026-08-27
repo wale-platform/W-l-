@@ -10,7 +10,7 @@ export default async function LandlordDashboard() {
   await requireRole(["LANDLORD", "ADMIN"]);
 
   return (
-    <main>
+    <main id="main">
       <Section>
         <Container size="wide" className="flex flex-col gap-8">
           <SectionHeading

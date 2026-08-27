@@ -22,7 +22,7 @@ export default async function NoAccessPage({ searchParams }: PageProps<"/no-acce
   const held = heldRoles(user);
 
   return (
-    <main className="flex min-h-[70vh] items-center justify-center px-4 py-16">
+    <main id="main" className="flex min-h-[70vh] items-center justify-center px-4 py-16">
       <div className="w-full max-w-md text-center">
         <span className="mx-auto mb-5 flex size-12 items-center justify-center rounded-full bg-amber-50">
           <ShieldAlert aria-hidden="true" className="size-6 text-amber-600" />

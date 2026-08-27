@@ -23,7 +23,7 @@ export default async function TenantPropertiesPage() {
   await requireRole(["TENANT", "MOVER", "ADMIN"]);
 
   return (
-    <main>
+    <main id="main">
       <Section>
         <Container size="wide" className="flex flex-col gap-8">
           <SectionHeading

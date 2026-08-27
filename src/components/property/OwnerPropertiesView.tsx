@@ -116,7 +116,7 @@ export function OwnerPropertiesView({
   }
 
   return (
-    <main>
+    <main id="main">
       <Section>
         <Container size="wide" className="flex flex-col gap-8">
           <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
