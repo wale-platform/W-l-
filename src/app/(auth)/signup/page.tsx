@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
+import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "@tanstack/react-query";
 import { signUpFormSchema, type SignUpFormData } from "@/lib/api/schemas";
@@ -24,7 +25,7 @@ export default function SignUpPage() {
     register,
     handleSubmit,
     formState: { errors },
-  } = useForm<SignUpFormData>({
+  } = useForm<z.input<typeof signUpFormSchema>, unknown, SignUpFormData>({
     resolver: zodResolver(signUpFormSchema),
     mode: "onBlur",
   });

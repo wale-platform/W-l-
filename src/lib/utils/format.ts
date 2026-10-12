@@ -38,6 +38,8 @@ const sourceLabels: Record<Property["source"], string> = {
   wale: "Listed by WALE",
   agent: "Via agent",
   landlord: "Direct from landlord",
+  lawyer: "Listed by lawyer",
+  tenant: "Listed by outgoing tenant",
 };
 
 export function formatSource(source: Property["source"]): string {

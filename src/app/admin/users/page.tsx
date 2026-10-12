@@ -95,7 +95,7 @@ export default function AdminUsersPage() {
                               : user.role === "lawyer"
                               ? "neutral"
                               : user.role === "tenant"
-                              ? "primary"
+                              ? "brand"
                               : "neutral"
                           }
                           className="uppercase font-semibold"
