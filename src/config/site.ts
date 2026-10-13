@@ -10,7 +10,7 @@ export const siteConfig = {
   tagline: "Find Your Home. Without the Hassle.",
   description:
     "Verified student housing across Nigeria. Search trusted listings near your university, compare real prices, and book inspections without agent runaround.",
-  url: process.env.NEXT_PUBLIC_SITE_URL ?? "https://walehousing.ng",
+  url: process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.waleonline.com.ng",
   locale: "en_NG",
   contact: {
     email: "hello@walehousing.ng",
