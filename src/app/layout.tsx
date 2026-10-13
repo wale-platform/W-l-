@@ -19,12 +19,15 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteConfig.url),
+
   title: {
-    default: `${siteConfig.name} — ${siteConfig.tagline}`,
-    // Pages set only their own title; the brand suffix is appended here.
+    default: "WALE - Find your home with no hassle",
     template: `%s | ${siteConfig.name}`,
   },
-  description: siteConfig.description,
+
+  description:
+    "A trusted, transparent digital housing platform for Nigeria with verified properties, secure owner connections, and inspection support.",
+
   keywords: [
     "student housing Nigeria",
     "verified student accommodation",
@@ -32,20 +35,26 @@ export const metadata: Metadata = {
     "off-campus housing",
     "student apartments Lagos",
   ],
+
   authors: [{ name: siteConfig.name }],
+
   openGraph: {
     type: "website",
     locale: siteConfig.locale,
     url: siteConfig.url,
     siteName: siteConfig.name,
-    title: `${siteConfig.name} — ${siteConfig.tagline}`,
-    description: siteConfig.description,
+    title: "WALE - Find your home with no hassle",
+    description:
+      "Discover, evaluate, verify, and secure premium accommodation in Nigeria with clear source transparency.",
   },
+
   twitter: {
     card: "summary_large_image",
-    title: `${siteConfig.name} — ${siteConfig.tagline}`,
-    description: siteConfig.description,
+    title: "WALE - Find your home with no hassle",
+    description:
+      "Discover, evaluate, verify, and secure premium accommodation in Nigeria with clear source transparency.",
   },
+
   robots: {
     index: true,
     follow: true,
