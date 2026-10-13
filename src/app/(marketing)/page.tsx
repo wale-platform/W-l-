@@ -42,7 +42,7 @@ const trustPoints = [
   {
     icon: GraduationCap,
     stat: "8 universities covered",
-    body: "From UNILAG to ABU Zaria, with the student catchment areas around each campus mapped street by street.",
+    body: "From UNILORIN to KWASU Malete, with the student catchment areas around each campus mapped street by street.",
   },
   {
     icon: MessagesSquare,

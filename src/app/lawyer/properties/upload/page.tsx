@@ -1,36 +1,76 @@
 "use client";
 
 import { useState } from "react";
-
+import { useRouter } from "next/navigation";
 import {
   Container,
   Section,
   SectionHeading,
 } from "@/components/layout/Container";
-
 import {
   Button,
   Card,
   CardBody,
   CardHeader,
   CardTitle,
+  toast,
 } from "@/components/ui";
+import { propertyApi } from "@/lib/api/property";
 
 export default function LawyerUploadPropertyPage() {
+  const router = useRouter();
+  const [isLoading, setIsLoading] = useState(false);
   const [propertyName, setPropertyName] = useState("");
   const [landlordName, setLandlordName] = useState("");
   const [price, setPrice] = useState("");
   const [location, setLocation] = useState("");
 
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    console.log({
-      propertyName,
-      landlordName,
-      price: Number(price),
-      location,
-    });
+    if (!propertyName || !landlordName || !price || !location) {
+      toast.error("Missing fields", { description: "Please fill in all required fields." });
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+
+      await propertyApi.create({
+        title: propertyName,
+        description: `Verified listing submitted on behalf of the property owner ${landlordName} by their legal representative.`,
+        price: Number(price),
+        type: "two_bedroom",
+        bedrooms: 2,
+        bathrooms: 2,
+        address: location,
+        city: "Ilorin",
+        state: "Kwara",
+        university: "unilorin",
+        availableDate: new Date().toISOString().split("T")[0],
+        images: [
+          "/listings/listing-03.jpg",
+          "/listings/listing-04.jpg",
+        ],
+        amenities: ["Prepaid meter", "Water borehole", "Gated compound"],
+        source: "lawyer",
+        landlord: {
+          name: landlordName,
+          phone: "+2348000000000",
+        },
+      });
+
+      toast.success("Listing submitted", {
+        description: "The property listing has been submitted successfully and is pending review.",
+      });
+      router.push("/lawyer");
+    } catch (err: any) {
+      toast.error("Submission failed", {
+        description: err.message || "An error occurred while uploading the property.",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -128,7 +168,7 @@ export default function LawyerUploadPropertyPage() {
                   />
                 </div>
 
-                <Button type="submit">
+                <Button type="submit" isLoading={isLoading} loadingText="Submitting...">
                   Submit Property
                 </Button>
               </form>

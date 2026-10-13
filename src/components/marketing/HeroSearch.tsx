@@ -45,7 +45,7 @@ export function HeroSearch() {
           id="hero-query"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search Akoka, Agbowo, Samaru…"
+          placeholder="Search Tanke, Oke-Odo, Malete…"
           className="h-12 w-full rounded-field border-0 pl-10 pr-3 text-sm text-ink-900 placeholder:text-ink-400 focus-visible:outline-none"
         />
       </div>

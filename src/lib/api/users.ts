@@ -22,13 +22,13 @@ const defaultProfile: StudentProfile = {
   name: "Amina Bello",
   email: "amina@example.com",
   phone: "08012345678",
-  university: "unilag",
+  university: "unilorin",
   faculty: "Science",
   department: "Computer Sciences",
   level: "400",
   studentId: "180805001",
   preferredBudget: 600000,
-  preferredLocation: "Akoka / Yaba",
+  preferredLocation: "Tanke / Fate",
 };
 
 export const usersApi = {
@@ -40,10 +40,32 @@ export const usersApi = {
     
     if (typeof window === "undefined") return defaultProfile;
 
-    const data = localStorage.getItem(LOCAL_STORAGE_KEY);
-    if (!data) {
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(defaultProfile));
+    // Retrieve currently logged-in user from localStorage
+    const userStr = localStorage.getItem("wale_user");
+    const user = userStr ? JSON.parse(userStr) : null;
+    
+    if (!user) {
       return defaultProfile;
+    }
+
+    const userProfileKey = `${LOCAL_STORAGE_KEY}_${user.email}`;
+    const data = localStorage.getItem(userProfileKey);
+    if (!data) {
+      // Create a default profile seeded with the logged-in user's data
+      const userDefaultProfile: StudentProfile = {
+        name: user.fullName || user.name || "Student",
+        email: user.email,
+        phone: user.phone || "08012345678",
+        university: user.university || "unilorin",
+        faculty: "Science",
+        department: "Computer Sciences",
+        level: "400",
+        studentId: "180805001",
+        preferredBudget: 600000,
+        preferredLocation: "Tanke / Fate",
+      };
+      localStorage.setItem(userProfileKey, JSON.stringify(userDefaultProfile));
+      return userDefaultProfile;
     }
 
     try {
@@ -61,7 +83,10 @@ export const usersApi = {
     await new Promise((resolve) => setTimeout(resolve, 1000)); // Simulate API delay
 
     if (typeof window !== "undefined") {
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(validated));
+      const userStr = localStorage.getItem("wale_user");
+      const user = userStr ? JSON.parse(userStr) : null;
+      const userProfileKey = user ? `${LOCAL_STORAGE_KEY}_${user.email}` : LOCAL_STORAGE_KEY;
+      localStorage.setItem(userProfileKey, JSON.stringify(validated));
     }
 
     return {

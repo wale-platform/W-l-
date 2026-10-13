@@ -45,7 +45,7 @@ export default function StudentDashboardPage() {
   });
 
   // 3. Fetch Properties near their university
-  const universityId = profile?.university || "unilag";
+  const universityId = profile?.university || "unilorin";
   const { data: nearbyHostels, isLoading: isHostelsLoading } = useProperties({
     university: universityId,
     pageSize: 3,

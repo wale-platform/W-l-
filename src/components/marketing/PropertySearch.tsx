@@ -171,7 +171,7 @@ export function PropertySearch({
                   id="search-query"
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Search Akoka, Agbowo, Tanke, Samaru…"
+                  placeholder="Search Tanke, Oke-Odo, Malete, Fate…"
                   className="h-12 pl-10"
                 />
               </div>

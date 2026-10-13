@@ -7,7 +7,7 @@
 export const siteConfig = {
   name: "WALE Housing",
   shortName: "WALE",
-  tagline: "Spaces that inspire life.",
+  tagline: "Find Your Home. Without the Hassle.",
   description:
     "Verified student housing across Nigeria. Search trusted listings near your university, compare real prices, and book inspections without agent runaround.",
   url: process.env.NEXT_PUBLIC_SITE_URL ?? "https://walehousing.ng",
@@ -15,7 +15,7 @@ export const siteConfig = {
   contact: {
     email: "hello@walehousing.ng",
     phone: "+234 800 000 0000",
-    address: "Yaba, Lagos, Nigeria",
+    address: "Ilorin, Kwara State, Nigeria",
   },
   socials: {
     twitter: "https://twitter.com/walehousing",
@@ -65,14 +65,14 @@ export const footerNav = [
  * university filter and the coverage section on the home page.
  */
 export const universities = [
+  { id: "unilorin", name: "University of Ilorin", short: "UNILORIN", city: "Ilorin" },
+  { id: "alhikmah", name: "Al Hikmah University", short: "AL-HIKMAH", city: "Ilorin" },
+  { id: "kwasu", name: "Kwara State University", short: "KWASU", city: "Malete" },
+  { id: "tau", name: "Thomas Adewumi University", short: "TAU", city: "Oko" },
   { id: "unilag", name: "University of Lagos", short: "UNILAG", city: "Lagos" },
   { id: "ui", name: "University of Ibadan", short: "UI", city: "Ibadan" },
   { id: "oau", name: "Obafemi Awolowo University", short: "OAU", city: "Ile-Ife" },
   { id: "abu", name: "Ahmadu Bello University", short: "ABU", city: "Zaria" },
-  { id: "unn", name: "University of Nigeria, Nsukka", short: "UNN", city: "Nsukka" },
-  { id: "uniben", name: "University of Benin", short: "UNIBEN", city: "Benin City" },
-  { id: "futa", name: "Federal University of Technology, Akure", short: "FUTA", city: "Akure" },
-  { id: "buk", name: "Bayero University Kano", short: "BUK", city: "Kano" },
 ] as const;
 
 export type UniversityId = (typeof universities)[number]["id"];

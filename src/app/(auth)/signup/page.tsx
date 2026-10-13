@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
+import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "@tanstack/react-query";
 import { signUpFormSchema, type SignUpFormData } from "@/lib/api/schemas";
@@ -12,6 +13,7 @@ import {
   FormField,
   Input,
   PasswordInput,
+  Select,
   Alert,
   toast,
 } from "@/components/ui";
@@ -23,19 +25,16 @@ export default function SignUpPage() {
     register,
     handleSubmit,
     formState: { errors },
-  } = useForm<SignUpFormData>({
+  } = useForm<z.input<typeof signUpFormSchema>, unknown, SignUpFormData>({
     resolver: zodResolver(signUpFormSchema),
     mode: "onBlur",
   });
 
   const mutation = useMutation({
     mutationFn: authApi.signUp,
-    onSuccess: (data) => {
-      if (typeof window !== "undefined") {
-        localStorage.setItem("wale_is_logged_in", "true");
-      }
-      toast.success("Welcome aboard!", { description: data.message });
-      router.push("/student"); // Redirect directly to student dashboard for a better MVP flow!
+    onSuccess: () => {
+      toast.success("Account created successfully!", { description: "Please log in with your email and password." });
+      router.push("/login");
     },
     onError: (error: Error) => {
       toast.error("Registration failed", { description: error.message });
@@ -107,6 +106,18 @@ export default function SignUpPage() {
               autoComplete="tel"
               placeholder="08012345678"
             />
+          )}
+        </FormField>
+
+        <FormField label="Account Type / Role" required error={errors.role?.message}>
+          {(field) => (
+            <Select {...field} {...register("role")}>
+              <option value="student">Student / Housing Seeker</option>
+              <option value="landlord">Landlord</option>
+              <option value="lawyer">Property Lawyer</option>
+              <option value="tenant">Outgoing Tenant</option>
+              <option value="admin">Administrator</option>
+            </Select>
           )}
         </FormField>
 

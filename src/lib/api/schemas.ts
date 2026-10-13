@@ -50,7 +50,7 @@ export const propertySchema = z.object({
       lng: z.number(),
     })
     .optional(),
-  source: z.enum(["wale", "agent", "landlord"]),
+  source: z.enum(["wale", "agent", "landlord", "lawyer", "tenant"]),
   landlord: z.object({
     name: z.string(),
     phone: z.string(),
@@ -135,6 +135,7 @@ export const signUpFormSchema = z
       .string()
       .min(1, "Phone number is required")
       .regex(/^(\+234|0)[789]\d{9}$/, "Invalid Nigerian phone number"),
+    role: z.enum(["student", "landlord", "lawyer", "tenant", "admin"]).default("student"),
     password: z
       .string()
       .min(8, "Password must be at least 8 characters")

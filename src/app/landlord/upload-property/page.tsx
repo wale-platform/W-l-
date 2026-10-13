@@ -1,22 +1,25 @@
 "use client";
 
 import { useState } from "react";
-
+import { useRouter } from "next/navigation";
 import {
   Container,
   Section,
   SectionHeading,
 } from "@/components/layout/Container";
-
 import {
   Button,
   Card,
   CardBody,
   CardHeader,
   CardTitle,
+  toast,
 } from "@/components/ui";
+import { propertyApi } from "@/lib/api/property";
 
 export default function UploadPropertyPage() {
+  const router = useRouter();
+  const [isLoading, setIsLoading] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState("");
@@ -30,7 +33,7 @@ export default function UploadPropertyPage() {
   const [availableDate, setAvailableDate] = useState("");
   const [amenities, setAmenities] = useState("");
 
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     if (
@@ -45,29 +48,51 @@ export default function UploadPropertyPage() {
       !state ||
       !availableDate
     ) {
-      alert("Please fill in all required fields.");
+      toast.error("Missing fields", { description: "Please fill in all required fields." });
       return;
     }
 
-    const property = {
-      title,
-      description,
-      price: Number(price),
-      type,
-      bedrooms: Number(bedrooms),
-      bathrooms: Number(bathrooms),
-      address,
-      city,
-      state,
-      university: university || undefined,
-      availableDate,
-      amenities: amenities
-        .split(",")
-        .map((item) => item.trim())
-        .filter(Boolean),
-    };
+    try {
+      setIsLoading(true);
 
-    console.log(property);
+      await propertyApi.create({
+        title,
+        description,
+        price: Number(price),
+        type: type as any,
+        bedrooms: Number(bedrooms),
+        bathrooms: Number(bathrooms),
+        address,
+        city,
+        state,
+        university: university || undefined,
+        availableDate,
+        images: [
+          "/listings/listing-01.jpg",
+          "/listings/listing-02.jpg",
+        ],
+        amenities: amenities
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean),
+        source: "landlord",
+        landlord: {
+          name: "Alhaji Kolawole",
+          phone: "+2348039998887",
+        },
+      });
+
+      toast.success("Listing submitted", {
+        description: "Your property listing has been submitted and is pending verification.",
+      });
+      router.push("/landlord");
+    } catch (err: any) {
+      toast.error("Submission failed", {
+        description: err.message || "An error occurred while uploading the property.",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -362,11 +387,12 @@ export default function UploadPropertyPage() {
                   <Button
                     tone="outline"
                     type="button"
+                    onClick={() => router.push("/landlord")}
                   >
                     Cancel
                   </Button>
 
-                  <Button type="submit">
+                  <Button type="submit" isLoading={isLoading} loadingText="Submitting...">
                     Submit Property
                   </Button>
                 </div>

@@ -29,18 +29,31 @@ export function Navbar() {
   }, [open]);
 
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [userRole, setUserRole] = useState("student");
 
   useEffect(() => {
     if (typeof window !== "undefined") {
       setIsLoggedIn(localStorage.getItem("wale_is_logged_in") === "true");
+      setUserRole(localStorage.getItem("wale_role") || "student");
     }
   }, [pathname]);
 
   const handleLogout = () => {
     if (typeof window !== "undefined") {
       localStorage.removeItem("wale_is_logged_in");
+      localStorage.removeItem("wale_role");
+      localStorage.removeItem("wale_user");
       setIsLoggedIn(false);
+      setUserRole("student");
     }
+  };
+
+  const getDashboardHref = () => {
+    if (userRole === "admin") return "/admin";
+    if (userRole === "landlord") return "/landlord";
+    if (userRole === "lawyer") return "/lawyer";
+    if (userRole === "tenant") return "/tenant";
+    return "/student";
   };
 
   const isActive = (href: string) =>
@@ -64,7 +77,7 @@ export function Navbar() {
                     className={cn(
                       "rounded-field px-3 py-2 text-sm font-medium transition-colors",
                       isActive(item.href)
-                        ? "bg-brand-50 text-brand-800"
+                         ? "bg-brand-50 text-brand-800"
                         : "text-ink-600 hover:bg-ink-50 hover:text-ink-900",
                     )}
                   >
@@ -78,7 +91,7 @@ export function Navbar() {
           <div className="hidden items-center gap-2 lg:flex">
             {isLoggedIn ? (
               <>
-                <Link href="/student">
+                <Link href={getDashboardHref()}>
                   <Button tone="ghost" size="sm">
                     Dashboard
                   </Button>
@@ -147,7 +160,7 @@ export function Navbar() {
               <div className="mt-4 flex flex-col gap-2 border-t border-ink-100 pt-4">
                 {isLoggedIn ? (
                   <>
-                    <Link href="/student" className="w-full">
+                    <Link href={getDashboardHref()} className="w-full">
                       <Button block>Dashboard</Button>
                     </Link>
                     <Button tone="outline" block onClick={handleLogout}>
