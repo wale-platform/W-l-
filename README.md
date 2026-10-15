@@ -22,6 +22,7 @@ students and future housing seekers across Nigeria.
 | HTTP | Axios |
 | Toasts | Sonner |
 | Icons | lucide-react |
+| Database | Neon PostgreSQL (`@neondatabase/serverless`) |
 
 ---
 
@@ -30,6 +31,9 @@ students and future housing seekers across Nigeria.
 ```bash
 npm install
 ```
+
+Copy `.env.example` to `.env.local` and set `DATABASE_URL` to the Neon
+PostgreSQL connection string. Keep `.env.local` private; it is ignored by Git.
 
 ```bash
 npm run dev
@@ -82,15 +86,22 @@ dashboard gets its own group later.
 
 ### The backend is mocked behind real HTTP
 
-There is no backend yet. Rather than importing fixtures into components — which
-would have to be ripped out later — mock data is served from **Route Handlers**
-(`src/app/api/`). The client genuinely does `axios → /api/properties`.
+Most backend functionality is still mocked. Rather than importing fixtures
+into components — which would have to be ripped out later — mock listing data
+is served from **Route Handlers** (`src/app/api/`). The client genuinely does
+`axios → /api/properties`.
 
 Switching to the real API is one environment variable:
 
 ```
 NEXT_PUBLIC_API_BASE_URL=https://api.walehousing.ng
 ```
+
+Waitlist signups are stored by the server-side `/api/waitlist` handler in the
+Neon `waitlist_signups` table. The endpoint creates the table if needed,
+validates submitted fields, and treats an existing email as an already-recorded
+signup. The database URL is read only from the server-side `DATABASE_URL`
+environment variable.
 
 Nothing else changes. The handlers add ~600ms of latency on purpose, so loading
 skeletons are actually observable in development.

@@ -105,6 +105,17 @@ export const contactFormSchema = z.object({
 
 export type ContactFormData = z.infer<typeof contactFormSchema>;
 
+/* --------------------------------------------------------- Waitlist -- */
+
+export const waitlistSignupSchema = z.object({
+  fullName: z.string().trim().min(2).max(120),
+  email: z.string().trim().email().transform((email) => email.toLowerCase()),
+  phone: z.string().trim().min(7).max(32),
+  userType: z.enum(["student", "tenant", "landlord", "lawyer"]),
+});
+
+export type WaitlistSignup = z.infer<typeof waitlistSignupSchema>;
+
 /* ------------------------------------------------------------ Auth -- */
 
 export const loginSchema = z.object({

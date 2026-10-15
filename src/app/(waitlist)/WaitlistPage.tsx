@@ -1,6 +1,7 @@
 
 "use client";
 
+import Link from "next/link";
 import { useState, type FormEvent } from "react";
 
 type UserType = "student" | "tenant" | "landlord" | "lawyer";
@@ -44,10 +45,42 @@ const audiences = [
 export default function HomePage() {
   const [userType, setUserType] = useState<UserType>("student");
   const [submitted, setSubmitted] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState("");
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setSubmitted(true);
+    setIsSubmitting(true);
+    setSubmitError("");
+
+    const formData = new FormData(event.currentTarget);
+    try {
+      const response = await fetch("/api/waitlist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fullName: formData.get("fullName"),
+          email: formData.get("email"),
+          phone: formData.get("phone"),
+          userType,
+        }),
+      });
+      const result: { message?: string } = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.message ?? "Please try again.");
+      }
+
+      setSubmitted(true);
+    } catch (error) {
+      setSubmitError(
+        error instanceof Error
+          ? error.message
+          : "We couldn't save your details right now. Please try again.",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   return (
@@ -55,16 +88,16 @@ export default function HomePage() {
       {/* Navigation */}
       <header className="border-b border-slate-100">
         <nav className="mx-auto flex max-w-7xl items-center justify-between px-5 py-5 sm:px-8">
-          <a href="/" className="text-2xl font-extrabold tracking-tight">
+          <Link href="/" className="text-2xl font-extrabold tracking-tight">
             WALE<span style={{ color: burgundy }}>.</span>
-          </a>
+          </Link>
 
           <div className="hidden items-center gap-7 text-sm font-medium md:flex">
             <a href="#about" className="hover:opacity-70">
               About
             </a>
             <a href="#community" className="hover:opacity-70">
-              Who it's for
+              Who it&apos;s for
             </a>
             <a href="#waitlist" className="hover:opacity-70">
               Waitlist
@@ -293,8 +326,8 @@ export default function HomePage() {
                   Thanks for your interest!
                 </h3>
                 <p className="mt-3 leading-7 text-slate-600">
-                  This is a frontend preview. Your details have not been
-                  saved or sent anywhere.
+                  Your details have been saved. We’ll keep you updated as WALE
+                  gets closer to launch.
                 </p>
                 <button
                   type="button"
@@ -313,6 +346,14 @@ export default function HomePage() {
                 </p>
 
                 <form onSubmit={handleSubmit} className="mt-7 space-y-5">
+                  {submitError && (
+                    <p
+                      role="alert"
+                      className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-800"
+                    >
+                      {submitError}
+                    </p>
+                  )}
                   <div>
                     <label
                       htmlFor="fullName"
@@ -404,10 +445,11 @@ export default function HomePage() {
 
                   <button
                     type="submit"
+                    disabled={isSubmitting}
                     className="w-full rounded-full px-6 py-4 font-bold text-white hover:opacity-90"
                     style={{ backgroundColor: burgundy }}
                   >
-                    Join the waitlist
+                    {isSubmitting ? "Saving..." : "Join the waitlist"}
                   </button>
 
                   {/* <p className="text-center text-xs leading-5 text-slate-500">
@@ -424,9 +466,9 @@ export default function HomePage() {
       {/* Footer */}
       <footer className="border-t border-slate-200 px-5 py-8 sm:px-8">
         <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 text-center sm:flex-row">
-          <a href="/" className="text-xl font-extrabold">
+          <Link href="/" className="text-xl font-extrabold">
             WALE<span style={{ color: burgundy }}>.</span>
-          </a>
+          </Link>
           <p className="text-sm text-slate-500">
             Making housing connections simpler.
           </p>
