@@ -98,10 +98,11 @@ NEXT_PUBLIC_API_BASE_URL=https://api.walehousing.ng
 ```
 
 Waitlist signups are stored by the server-side `/api/waitlist` handler in the
-Neon `waitlist_signups` table. The endpoint creates the table if needed,
-validates submitted fields, and treats an existing email as an already-recorded
-signup. The database URL is read only from the server-side `DATABASE_URL`
-environment variable.
+Neon `waitlist_signups` table. The endpoint creates the table if needed and
+adds the phone column to an existing table if needed, preserving existing
+signups. It validates submitted fields and treats an existing email as an
+already-recorded signup. The database URL is read only from the server-side
+`DATABASE_URL` environment variable.
 
 Nothing else changes. The handlers add ~600ms of latency on purpose, so loading
 skeletons are actually observable in development.

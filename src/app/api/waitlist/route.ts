@@ -36,23 +36,31 @@ export async function POST(request: Request) {
     await sql`
       CREATE TABLE IF NOT EXISTS waitlist_signups (
         id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-        full_name TEXT NOT NULL,
-        email TEXT NOT NULL UNIQUE,
-        phone TEXT NOT NULL,
-        user_type TEXT NOT NULL CHECK (
-          user_type IN ('student', 'tenant', 'landlord', 'lawyer')
+        name VARCHAR(120) NOT NULL,
+        email VARCHAR(254) NOT NULL UNIQUE,
+        phone VARCHAR(32),
+        role VARCHAR(20) NOT NULL CHECK (
+          role IN ('student', 'tenant', 'landlord', 'lawyer')
         ),
+        consent_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
     `;
 
     await sql`
-      INSERT INTO waitlist_signups (full_name, email, phone, user_type)
+      ALTER TABLE waitlist_signups
+      ADD COLUMN IF NOT EXISTS phone VARCHAR(32)
+    `;
+
+    await sql`
+      INSERT INTO waitlist_signups (name, email, phone, role, consent_at, created_at)
       VALUES (
         ${parsed.data.fullName},
         ${parsed.data.email},
         ${parsed.data.phone},
-        ${parsed.data.userType}
+        ${parsed.data.userType},
+        NOW(),
+        NOW()
       )
       ON CONFLICT (email) DO NOTHING
     `;
