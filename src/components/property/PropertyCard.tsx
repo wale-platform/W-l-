@@ -19,7 +19,10 @@ export function PropertyCard({ property }: { property: Property }) {
   const uni = universityName(property.university);
 
   return (
-    <Card interactive className="relative group flex flex-col overflow-hidden">
+    <Card
+      interactive
+      className="group relative flex flex-col overflow-hidden border-brand-100/80 bg-gradient-to-br from-white via-white to-brand-50/60"
+    >
       <div className="relative aspect-[4/3] overflow-hidden bg-ink-100">
         <Image
           src={property.images[0]}

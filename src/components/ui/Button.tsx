@@ -8,7 +8,7 @@ const button = variants(
     "disabled:pointer-events-none disabled:opacity-55",
   {
     tone: {
-      primary: "bg-brand-600 text-white hover:bg-brand-700 active:bg-brand-800",
+      primary: "bg-brand-800 text-white hover:bg-brand-900 active:bg-brand-950",
       secondary:
         "bg-brand-50 text-brand-800 hover:bg-brand-100 active:bg-brand-200",
       outline:

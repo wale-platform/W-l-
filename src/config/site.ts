@@ -7,7 +7,7 @@
 export const siteConfig = {
   name: "WALE Housing",
   shortName: "WALE",
-  tagline: "Find Your Home. Without the Hassle.",
+  tagline: "Find your home with no hassle.",
   description:
     "Verified student housing across Nigeria. Search trusted listings near your university, compare real prices, and book inspections without agent runaround.",
   url: process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.waleonline.com.ng",
@@ -27,9 +27,8 @@ export const siteConfig = {
 export const mainNav = [
   { label: "Home", href: "/" },
   { label: "Browse homes", href: "/properties" },
-  { label: "About", href: "/about" },
-  { label: "FAQ", href: "/faq" },
-  { label: "Contact", href: "/contact" },
+  { label: "AI Match", href: "/match" },
+  { label: "Map search", href: "/map" },
 ] as const;
 
 export const footerNav = [
@@ -37,9 +36,9 @@ export const footerNav = [
     heading: "Platform",
     links: [
       { label: "Browse homes", href: "/properties" },
-      { label: "How it works", href: "/#how-it-works" },
-      { label: "Universities", href: "/#universities" },
-      { label: "Create account", href: "/signup" },
+      { label: "AI Match", href: "/match" },
+      { label: "Search the map", href: "/map" },
+      { label: "Join waitlist", href: "/#waitlist" },
     ],
   },
   {

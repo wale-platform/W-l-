@@ -39,7 +39,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
                 Spaces that inspire life.
               </h2>
               <p className="text-lg leading-relaxed text-brand-200">
-                WALE is the trusted platform for Nigerian students to find and secure housing near their university without the usual hassle.
+                Find your home with no hassle. WALE helps Nigerian students discover and secure housing near their university.
               </p>
             </div>
 

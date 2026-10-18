@@ -51,6 +51,8 @@ export const propertySchema = z.object({
     })
     .optional(),
   source: z.enum(["wale", "agent", "landlord", "lawyer", "tenant"]),
+  availabilityStatus: z.enum(["available", "limited", "occupied"]).optional(),
+  featured: z.boolean().optional(),
   landlord: z.object({
     name: z.string(),
     phone: z.string(),

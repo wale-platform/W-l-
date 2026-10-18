@@ -101,16 +101,9 @@ export function Navbar() {
                 </Button>
               </>
             ) : (
-              <>
-                <Link href="/login">
-                  <Button tone="ghost" size="sm">
-                    Log in
-                  </Button>
-                </Link>
-                <Link href="/signup">
-                  <Button size="sm">Create account</Button>
-                </Link>
-              </>
+              <Link href="/#waitlist">
+                <Button size="sm">Get early access</Button>
+              </Link>
             )}
           </div>
 
@@ -168,16 +161,9 @@ export function Navbar() {
                     </Button>
                   </>
                 ) : (
-                  <>
-                    <Link href="/login" className="w-full">
-                      <Button tone="outline" block>
-                        Log in
-                      </Button>
-                    </Link>
-                    <Link href="/signup" className="w-full">
-                      <Button block>Create account</Button>
-                    </Link>
-                  </>
+                  <Link href="/#waitlist" className="w-full">
+                    <Button block>Get early access</Button>
+                  </Link>
                 )}
               </div>
             </nav>

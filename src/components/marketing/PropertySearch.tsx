@@ -150,15 +150,15 @@ export function PropertySearch({
   return (
     <>
       {/* Search bar + filter toggle */}
-      <Section as="div" spacing="tight" className="bg-ink-50/70 py-6 border-b border-ink-100">
-        <Container size="default">
+      <Section as="div" spacing="tight" className="border-b border-ink-100 bg-ink-50/70 py-3">
+        <Container size="wide">
           <form
             onSubmit={handleSearch}
             role="search"
             aria-label="Search properties"
-            className="flex flex-col gap-3"
+            className="flex flex-col gap-2"
           >
-            <div className="flex gap-2">
+            <div className="flex items-center gap-2 rounded-xl border border-ink-200 bg-white p-1.5 shadow-sm">
               <div className="relative flex-1">
                 <label htmlFor="search-query" className="sr-only">
                   Search by area, city, or landmark
@@ -172,7 +172,7 @@ export function PropertySearch({
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                   placeholder="Search Tanke, Oke-Odo, Malete, Fate…"
-                  className="h-12 pl-10"
+                  className="h-10 border-0 pl-10 shadow-none focus-visible:ring-0"
                 />
               </div>
 
@@ -180,13 +180,14 @@ export function PropertySearch({
                 type="button"
                 tone="outline"
                 size="lg"
-                className="h-12 shrink-0"
+                className="h-10 shrink-0 px-3 sm:px-4"
                 onClick={() => setShowFilters(!showFilters)}
                 aria-expanded={showFilters}
                 aria-controls="filters-panel"
               >
                 <SlidersHorizontal aria-hidden="true" className="size-4" />
-                Filters
+                <span className="hidden sm:inline">Filters</span>
+                <span className="sr-only sm:hidden">Filters</span>
                 {activeFilters > 0 && (
                   <span className="flex size-5 items-center justify-center rounded-full bg-brand-600 text-[10px] font-semibold text-white">
                     {activeFilters}
@@ -194,8 +195,9 @@ export function PropertySearch({
                 )}
               </Button>
 
-              <Button type="submit" size="lg" className="h-12 px-8 shrink-0">
-                Search
+              <Button type="submit" size="lg" className="h-10 shrink-0 px-3 sm:px-5">
+                <Search aria-hidden="true" className="size-4 sm:hidden" />
+                <span className="sr-only sm:not-sr-only">Search</span>
               </Button>
             </div>
           </form>
@@ -349,7 +351,7 @@ export function PropertySearch({
       )}
 
       {/* Results */}
-      <Section className="py-10">
+      <Section spacing="tight" className="py-5">
         <Container size="wide">
           {isLoading && (
             <div aria-busy="true" aria-live="polite">

@@ -1,45 +1,21 @@
-
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
+import { Footer } from "@/components/layout/Footer";
+import { Navbar } from "@/components/layout/Navbar";
+import { FeaturedListings } from "@/components/marketing/FeaturedListings";
+import { HeroSearch } from "@/components/marketing/HeroSearch";
+import { universities } from "@/config/site";
 
 type UserType = "student" | "tenant" | "landlord" | "lawyer";
-
-const burgundy = "#7a1737";
 
 const userTypes: { value: UserType; label: string }[] = [
   { value: "student", label: "Student" },
   { value: "tenant", label: "Tenant" },
   { value: "landlord", label: "Landlord" },
-  { value: "lawyer", label: "Property Lawyer" },
-];
-
-const audiences = [
-  {
-    icon: "🎓",
-    title: "Students",
-    description:
-      "Discover accommodation options that fit your needs as a student.",
-  },
-  {
-    icon: "🏠",
-    title: "Tenants",
-    description:
-      "Explore housing options and connect with landlords more easily.",
-  },
-  {
-    icon: "🔑",
-    title: "Landlords",
-    description:
-      "Showcase your properties and connect with prospective tenants.",
-  },
-  {
-    icon: "⚖️",
-    title: "Property Lawyers",
-    description:
-      "Connect with property-related opportunities and support housing transactions.",
-  },
+  { value: "lawyer", label: "Property lawyer" },
 ];
 
 export default function HomePage() {
@@ -84,268 +60,292 @@ export default function HomePage() {
   }
 
   return (
-    <main className="min-h-screen bg-white text-slate-900">
-      {/* Navigation */}
-      <header className="border-b border-slate-100">
-        <nav className="mx-auto flex max-w-7xl items-center justify-between px-5 py-5 sm:px-8">
-          <Link href="/" className="text-2xl font-extrabold tracking-tight">
-            WALE<span style={{ color: burgundy }}>.</span>
-          </Link>
-
-          <div className="hidden items-center gap-7 text-sm font-medium md:flex">
-            <a href="#about" className="hover:opacity-70">
-              About
-            </a>
-            <a href="#community" className="hover:opacity-70">
-              Who it&apos;s for
-            </a>
-            <a href="#waitlist" className="hover:opacity-70">
-              Waitlist
-            </a>
-          </div>
-
-          <a
-            href="#waitlist"
-            style={{ backgroundColor: burgundy }}
-            className="rounded-full px-5 py-3 text-sm font-semibold text-white hover:opacity-90"
-          >
-            Get early access
-          </a>
-        </nav>
-      </header>
-
-      {/* Hero */}
-      <section
-        id="about"
-        style={{
-          background:
-            "linear-gradient(135deg, #fff7fa 0%, #ffffff 55%, #f7eaf0 100%)",
-        }}
-      >
-        <div className="mx-auto grid max-w-7xl items-center gap-12 px-5 py-20 sm:px-8 md:grid-cols-2 md:py-28">
-          <div>
-            <span
-              className="inline-block rounded-full px-4 py-2 text-sm font-semibold"
-              style={{ backgroundColor: "#f2e1e8", color: burgundy }}
-            >
-              A better housing experience
-            </span>
-
-            <h1 className="mt-6 text-4xl font-extrabold leading-tight tracking-tight sm:text-5xl lg:text-6xl">
-              Finding your home
-              <span className="block" style={{ color: burgundy }}>
-                without hassle.
-              </span>
-            </h1>
-
-            <p className="mt-6 max-w-xl text-lg leading-8 text-slate-600">
-              WALE is building a platform to bring students, tenants,
-              landlords, and property lawyers together for a more accessible
-              and transparent housing experience.
-            </p>
-
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <a
-                href="#waitlist"
-                style={{ backgroundColor: burgundy }}
-                className="rounded-full px-7 py-4 text-center font-semibold text-white hover:opacity-90"
-              >
-                Join the waitlist
-              </a>
-
-              <a
-                href="#community"
-                className="rounded-full border border-slate-300 bg-white px-7 py-4 text-center font-semibold hover:bg-slate-50"
-              >
-                Explore WALE
-              </a>
-            </div>
-
-            <p className="mt-5 text-sm text-slate-500">
-              One platform, four communities.
-            </p>
-          </div>
-
-          <div className="rounded-3xl border border-white bg-white p-5 shadow-2xl shadow-rose-950/10 sm:p-7">
-            <div
-              className="rounded-2xl p-5 sm:p-7"
-              style={{ backgroundColor: "#f8edf1" }}
-            >
-              <p className="text-sm font-medium text-slate-500">
-                Welcome to WALE
+    <>
+      <Navbar />
+      <main id="main" className="bg-white text-ink-900">
+        <section className="bg-gradient-to-br from-[#fff8fb] via-white to-[#f7eaf0]">
+          <div className="mx-auto grid max-w-7xl items-center gap-6 px-5 py-8 sm:px-8 sm:py-10 md:grid-cols-[1.1fr_0.9fr] md:gap-10 md:py-14">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-800">
+                Homes, without hassle
               </p>
-              <h2 className="mt-2 text-2xl font-extrabold sm:text-3xl">
-                A place for every side of housing.
-              </h2>
+              <h1 className="mt-3 max-w-xl text-3xl font-extrabold leading-tight tracking-tight sm:text-4xl lg:text-5xl">
+                Find your home with no hassle.
+              </h1>
+              <p className="mt-3 max-w-xl text-sm leading-6 text-ink-600 sm:text-base">
+                Search by area or university. Compare homes and explore
+                locations directly.
+              </p>
 
-              <div className="mt-6 grid grid-cols-2 gap-3">
-                {audiences.map((audience) => (
-                  <div
-                    key={audience.title}
-                    className="rounded-2xl bg-white p-4"
-                  >
-                    <span className="text-2xl" aria-hidden="true">
-                      {audience.icon}
-                    </span>
-                    <h3 className="mt-3 text-sm font-bold sm:text-base">
-                      {audience.title}
-                    </h3>
-                    <p className="mt-2 text-xs leading-5 text-slate-500">
-                      {audience.description}
-                    </p>
-                  </div>
-                ))}
+              <div className="mt-5 max-w-2xl">
+                <HeroSearch />
+              </div>
+              <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-sm font-semibold">
+                <Link href="/match" className="text-brand-800 hover:underline">
+                  Try AI Match
+                </Link>
+                <Link href="/map" className="text-brand-800 hover:underline">
+                  Search on the map
+                </Link>
+                <a href="#waitlist" className="text-ink-600 hover:underline">
+                  Get launch updates
+                </a>
               </div>
             </div>
-          </div>
-        </div>
-      </section>
 
-      {/* Audience cards */}
-      <section id="community" className="px-5 py-20 sm:px-8 md:py-24">
-        <div className="mx-auto max-w-7xl">
-          <div className="mx-auto max-w-2xl text-center">
-            <p
-              className="text-sm font-bold uppercase tracking-widest"
-              style={{ color: burgundy }}
-            >
-              Built for your needs
-            </p>
-            <h2 className="mt-4 text-3xl font-extrabold sm:text-4xl">
-              One platform. Four communities.
-            </h2>
-            <p className="mt-4 leading-7 text-slate-600">
-              WALE aims to make housing connections easier for everyone
-              involved in the process.
-            </p>
+            <div className="relative h-56 overflow-hidden rounded-2xl shadow-lg sm:h-72 md:h-80">
+              <Image
+                src="/listings/hero-apartment.jpg"
+                alt="Bright modern apartment living room with an open-plan kitchen"
+                fill
+                priority
+                sizes="(max-width: 768px) 100vw, 45vw"
+                className="object-cover"
+              />
+            </div>
           </div>
+        </section>
 
-          <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            {audiences.map((audience) => (
-              <article
-                key={audience.title}
-                className="rounded-3xl border border-slate-200 p-6 transition hover:-translate-y-1 hover:shadow-lg"
-              >
-                <span className="text-3xl" aria-hidden="true">
-                  {audience.icon}
-                </span>
-                <h3 className="mt-5 text-xl font-bold">
-                  {audience.title}
-                </h3>
-                <p className="mt-3 text-sm leading-7 text-slate-600">
-                  {audience.description}
+        <section aria-labelledby="featured-homes-title" className="py-8 sm:py-10">
+          <div className="mx-auto max-w-7xl px-5 sm:px-8">
+            <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.14em] text-brand-800">
+                  Start exploring
                 </p>
-              </article>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* How it works */}
-      <section
-        className="px-5 py-20 sm:px-8 md:py-24"
-        style={{ backgroundColor: "#faf6f8" }}
-      >
-        <div className="mx-auto max-w-7xl">
-          <div className="text-center">
-            <p
-              className="text-sm font-bold uppercase tracking-widest"
-              style={{ color: burgundy }}
-            >
-              Getting started
-            </p>
-            <h2 className="mt-4 text-3xl font-extrabold sm:text-4xl">
-              Be part of the journey.
-            </h2>
-          </div>
-
-          <div className="mt-12 grid gap-8 md:grid-cols-3">
-            {[
-              {
-                number: "01",
-                title: "Join the waitlist",
-                description:
-                  "Tell us who you are and how WALE relates to your housing needs.",
-              },
-              {
-                number: "02",
-                title: "Stay connected",
-                description:
-                  "Receive updates as the platform progresses towards launch.",
-              },
-              {
-                number: "03",
-                title: "Get launch updates",
-                description:
-                  "Be informed as more details and access opportunities become available.",
-              },
-            ].map((step) => (
-              <article key={step.number} className="text-center">
-                <div
-                  className="mx-auto flex h-14 w-14 items-center justify-center rounded-full text-lg font-extrabold text-white"
-                  style={{ backgroundColor: burgundy }}
+                <h2
+                  id="featured-homes-title"
+                  className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl"
                 >
-                  {step.number}
-                </div>
-                <h3 className="mt-5 text-xl font-bold">{step.title}</h3>
-                <p className="mx-auto mt-3 max-w-sm leading-7 text-slate-600">
-                  {step.description}
+                  Homes to get you started
+                </h2>
+              </div>
+              <Link
+                href="/properties"
+                className="text-sm font-semibold text-brand-800 hover:underline"
+              >
+                Browse all homes
+              </Link>
+            </div>
+            <FeaturedListings limit={3} />
+          </div>
+        </section>
+
+        <section
+          aria-labelledby="wale-tools-title"
+          className="border-y border-ink-100 bg-ink-50/50 py-8 sm:py-10"
+        >
+          <div className="mx-auto max-w-7xl px-5 sm:px-8">
+            <div className="mb-5 max-w-2xl">
+              <p className="text-xs font-bold uppercase tracking-[0.14em] text-brand-800">
+                A simpler way to find a home
+              </p>
+              <h2
+                id="wale-tools-title"
+                className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl"
+              >
+                Search your way, with more confidence
+              </h2>
+            </div>
+            <div className="grid gap-3 md:grid-cols-3">
+              <article className="rounded-2xl border border-ink-200 bg-white p-4 sm:p-5">
+                <h3 className="font-semibold">Find homes that fit</h3>
+                <p className="mt-1.5 text-sm leading-6 text-ink-600">
+                  Filter by location, university, rent, and home type, or use AI
+                  Match to rank listings against your preferences.
                 </p>
+                <Link
+                  href="/match"
+                  className="mt-3 inline-flex text-sm font-semibold text-brand-800 hover:underline"
+                >
+                  Try AI Match
+                </Link>
               </article>
-            ))}
+              <article className="rounded-2xl border border-ink-200 bg-white p-4 sm:p-5">
+                <h3 className="font-semibold">Explore homes on the map</h3>
+                <p className="mt-1.5 text-sm leading-6 text-ink-600">
+                  Search with a postcode, neighbourhood, or city and see homes
+                  near the places that matter to you.
+                </p>
+                <Link
+                  href="/map"
+                  className="mt-3 inline-flex text-sm font-semibold text-brand-800 hover:underline"
+                >
+                  Search the map
+                </Link>
+              </article>
+              <article className="rounded-2xl border border-ink-200 bg-white p-4 sm:p-5">
+                <h3 className="font-semibold">Know what you&apos;re viewing</h3>
+                <p className="mt-1.5 text-sm leading-6 text-ink-600">
+                  Compare rent, availability, amenities, verification, and
+                  listing source before arranging an inspection.
+                </p>
+                <Link
+                  href="/properties"
+                  className="mt-3 inline-flex text-sm font-semibold text-brand-800 hover:underline"
+                >
+                  Browse homes
+                </Link>
+              </article>
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* Waitlist */}
-      <section id="waitlist" className="px-5 py-20 sm:px-8 md:py-24">
-        <div className="mx-auto grid max-w-7xl items-start gap-12 md:grid-cols-2">
-          <div className="md:pt-8">
-            <p
-              className="text-sm font-bold uppercase tracking-widest"
-              style={{ color: burgundy }}
-            >
-              Be among the first
-            </p>
-            <h2 className="mt-4 text-3xl font-extrabold leading-tight sm:text-4xl">
-              Your next housing connection starts here.
-            </h2>
-            <p className="mt-5 max-w-xl leading-8 text-slate-600">
-              Join the WALE waitlist to follow our progress and receive
-              updates relevant to your role in the housing community.
-            </p>
+        <section
+          aria-labelledby="wale-community-title"
+          className="py-8 sm:py-10"
+        >
+          <div className="mx-auto grid max-w-7xl gap-8 px-5 sm:px-8 lg:grid-cols-[0.8fr_1.2fr] lg:items-start">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.14em] text-brand-800">
+                Built for housing connections
+              </p>
+              <h2
+                id="wale-community-title"
+                className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl"
+              >
+                One platform for every side of the move
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-ink-600">
+                WALE brings people in the housing process together around
+                clearer listings, practical tools, and more direct connections.
+              </p>
+            </div>
+            <ul className="grid gap-3 sm:grid-cols-2">
+              {[
+                ["Students", "Find accommodation near campus and compare options."],
+                ["Tenants", "Explore homes that suit your needs and budget."],
+                ["Landlords", "Present properties to people actively looking."],
+                ["Property lawyers", "Connect with housing opportunities and transactions."],
+              ].map(([title, description]) => (
+                <li
+                  key={title}
+                  className="rounded-2xl border border-ink-200 bg-white p-4"
+                >
+                  <h3 className="text-sm font-semibold">{title}</h3>
+                  <p className="mt-1 text-sm leading-5 text-ink-600">
+                    {description}
+                  </p>
+                </li>
+              ))}
+            </ul>
           </div>
+        </section>
 
-          <div className="rounded-3xl border border-slate-200 p-6 shadow-xl shadow-slate-900/5 sm:p-9">
+        <section
+          aria-labelledby="wale-steps-title"
+          className="border-y border-ink-100 bg-ink-50/50 py-8 sm:py-10"
+        >
+          <div className="mx-auto max-w-7xl px-5 sm:px-8">
+            <div className="mb-5">
+              <p className="text-xs font-bold uppercase tracking-[0.14em] text-brand-800">
+                How WALE works
+              </p>
+              <h2
+                id="wale-steps-title"
+                className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl"
+              >
+                From search to your next move
+              </h2>
+            </div>
+            <ol className="grid gap-3 sm:grid-cols-3">
+              {[
+                ["01", "Search", "Set your area, university, budget, or home type."],
+                ["02", "Compare", "Review photos, rent, availability, and home details."],
+                ["03", "Connect", "Choose a listing and arrange a conversation or inspection."],
+              ].map(([number, title, description]) => (
+                <li
+                  key={number}
+                  className="flex gap-3 rounded-2xl border border-ink-200 bg-white p-4"
+                >
+                  <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-50 text-xs font-bold text-brand-800">
+                    {number}
+                  </span>
+                  <span>
+                    <span className="block text-sm font-semibold">{title}</span>
+                    <span className="mt-1 block text-sm leading-5 text-ink-600">
+                      {description}
+                    </span>
+                  </span>
+                </li>
+              ))}
+            </ol>
+          </div>
+        </section>
+
+        <section
+          aria-labelledby="wale-coverage-title"
+          className="bg-gradient-to-r from-[#fff8fb] via-white to-[#f7eaf0] py-8 sm:py-10"
+        >
+          <div className="mx-auto grid max-w-7xl gap-6 px-5 sm:px-8 md:grid-cols-[0.8fr_1.2fr] md:items-center">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.14em] text-brand-800">
+                Where we&apos;re growing
+              </p>
+              <h2
+                id="wale-coverage-title"
+                className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl"
+              >
+                Housing near Nigerian universities
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-ink-600">
+                Explore student housing around our university catchments.
+                Coverage grows as more homes and local partners join WALE.
+              </p>
+            </div>
+            <ul className="flex flex-wrap gap-2">
+              {universities.map((university) => (
+                <li key={university.id}>
+                  <Link
+                    href={`/properties?university=${university.id}`}
+                    className="inline-flex rounded-full border border-brand-200 bg-white px-3 py-1.5 text-xs font-semibold text-brand-800 transition-colors hover:bg-brand-50"
+                  >
+                    {university.short}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
+
+        <section
+          id="waitlist"
+          aria-labelledby="waitlist-title"
+          className="scroll-mt-20 border-t border-ink-100 bg-ink-50/60 py-8 sm:py-10"
+        >
+          <div className="mx-auto max-w-3xl px-5 sm:px-8">
             {submitted ? (
-              <div className="py-8 text-center">
-                <span className="text-5xl" aria-hidden="true">
-                  🌸
-                </span>
-                <h3 className="mt-5 text-2xl font-bold">
+              <div className="rounded-2xl border border-ink-200 bg-white p-6 text-center shadow-sm">
+                <h2 id="waitlist-title" className="text-xl font-bold">
                   Thanks for your interest!
-                </h3>
-                <p className="mt-3 leading-7 text-slate-600">
-                  Your details have been saved. We’ll keep you updated as WALE
+                </h2>
+                <p className="mt-2 text-sm leading-6 text-ink-600">
+                  Your details are saved. We&apos;ll keep you updated as WALE
                   gets closer to launch.
                 </p>
                 <button
                   type="button"
                   onClick={() => setSubmitted(false)}
-                  className="mt-6 font-semibold underline underline-offset-4"
-                  style={{ color: burgundy }}
+                  className="mt-4 text-sm font-semibold text-brand-800 underline underline-offset-4"
                 >
                   Back to the form
                 </button>
               </div>
             ) : (
-              <>
-                <h3 className="text-2xl font-bold">Join the waitlist</h3>
-                <p className="mt-2 text-sm leading-6 text-slate-500">
-                  Enter your details below.
-                </p>
+              <div className="rounded-2xl border border-ink-200 bg-white p-5 shadow-sm sm:p-6">
+                <div className="mb-5">
+                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-brand-800">
+                    Stay in the loop
+                  </p>
+                  <h2
+                    id="waitlist-title"
+                    className="mt-1 text-xl font-bold tracking-tight sm:text-2xl"
+                  >
+                    Get WALE launch updates
+                  </h2>
+                </div>
 
-                <form onSubmit={handleSubmit} className="mt-7 space-y-5">
+                <form onSubmit={handleSubmit} className="space-y-4">
                   {submitError && (
                     <p
                       role="alert"
@@ -354,129 +354,96 @@ export default function HomePage() {
                       {submitError}
                     </p>
                   )}
-                  <div>
-                    <label
-                      htmlFor="fullName"
-                      className="mb-2 block text-sm font-semibold"
-                    >
-                      Full name
-                    </label>
-                    <input
-                      id="fullName"
-                      name="fullName"
-                      type="text"
-                      autoComplete="name"
-                      placeholder="Enter your full name"
-                      required
-                      className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-rose-800 focus:ring-2 focus:ring-rose-100"
-                    />
-                  </div>
-
-                  <div>
-                    <label
-                      htmlFor="email"
-                      className="mb-2 block text-sm font-semibold"
-                    >
-                      Email address
-                    </label>
-                    <input
-                      id="email"
-                      name="email"
-                      type="email"
-                      autoComplete="email"
-                      placeholder="you@example.com"
-                      required
-                      className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-rose-800 focus:ring-2 focus:ring-rose-100"
-                    />
-                  </div>
-
-                  <div>
-                    <label
-                      htmlFor="phone"
-                      className="mb-2 block text-sm font-semibold"
-                    >
-                      Phone number
-                    </label>
-                    <input
-                      id="phone"
-                      name="phone"
-                      type="tel"
-                      autoComplete="tel"
-                      placeholder="Enter your phone number"
-                      required
-                      className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-rose-800 focus:ring-2 focus:ring-rose-100"
-                    />
-                  </div>
-
-                  <fieldset>
-                    <legend className="mb-3 text-sm font-semibold">
-                      I am joining as a...
-                    </legend>
-
-                    <div className="grid grid-cols-2 gap-3">
-                      {userTypes.map((option) => (
-                        <button
-                          key={option.value}
-                          type="button"
-                          onClick={() => setUserType(option.value)}
-                          aria-pressed={userType === option.value}
-                          className="rounded-xl border px-3 py-3 text-sm font-semibold transition"
-                          style={
-                            userType === option.value
-                              ? {
-                                  borderColor: burgundy,
-                                  backgroundColor: "#f8edf1",
-                                  color: burgundy,
-                                }
-                              : {}
-                          }
-                        >
-                          {option.label}
-                        </button>
-                      ))}
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div>
+                      <label
+                        htmlFor="fullName"
+                        className="mb-1.5 block text-sm font-semibold"
+                      >
+                        Full name
+                      </label>
+                      <input
+                        id="fullName"
+                        name="fullName"
+                        type="text"
+                        autoComplete="name"
+                        placeholder="Your name"
+                        required
+                        className="h-11 w-full rounded-xl border border-ink-200 px-3 text-sm outline-none focus:border-brand-800 focus:ring-2 focus:ring-brand-100"
+                      />
                     </div>
-
-                    <input
-                      type="hidden"
-                      name="userType"
-                      value={userType}
-                    />
-                  </fieldset>
-
+                    <div>
+                      <label
+                        htmlFor="email"
+                        className="mb-1.5 block text-sm font-semibold"
+                      >
+                        Email address
+                      </label>
+                      <input
+                        id="email"
+                        name="email"
+                        type="email"
+                        autoComplete="email"
+                        placeholder="you@example.com"
+                        required
+                        className="h-11 w-full rounded-xl border border-ink-200 px-3 text-sm outline-none focus:border-brand-800 focus:ring-2 focus:ring-brand-100"
+                      />
+                    </div>
+                    <div>
+                      <label
+                        htmlFor="phone"
+                        className="mb-1.5 block text-sm font-semibold"
+                      >
+                        Phone number
+                      </label>
+                      <input
+                        id="phone"
+                        name="phone"
+                        type="tel"
+                        autoComplete="tel"
+                        placeholder="Your phone number"
+                        required
+                        className="h-11 w-full rounded-xl border border-ink-200 px-3 text-sm outline-none focus:border-brand-800 focus:ring-2 focus:ring-brand-100"
+                      />
+                    </div>
+                    <fieldset>
+                      <legend className="mb-1.5 text-sm font-semibold">
+                        I am a...
+                      </legend>
+                      <div className="grid grid-cols-2 gap-2">
+                        {userTypes.map((option) => (
+                          <button
+                            key={option.value}
+                            type="button"
+                            onClick={() => setUserType(option.value)}
+                            aria-pressed={userType === option.value}
+                            className={
+                              userType === option.value
+                                ? "min-h-11 rounded-xl border border-brand-800 bg-brand-50 px-2 text-xs font-semibold text-brand-800"
+                                : "min-h-11 rounded-xl border border-ink-200 bg-white px-2 text-xs font-semibold text-ink-700"
+                            }
+                          >
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
+                    </fieldset>
+                  </div>
+                  <input type="hidden" name="userType" value={userType} />
                   <button
                     type="submit"
                     disabled={isSubmitting}
-                    className="w-full rounded-full px-6 py-4 font-bold text-white hover:opacity-90"
-                    style={{ backgroundColor: burgundy }}
+                    className="min-h-11 w-full rounded-xl bg-brand-800 px-5 text-sm font-semibold text-white transition-colors hover:bg-brand-900 disabled:cursor-wait disabled:opacity-70 sm:w-auto"
                   >
                     {isSubmitting ? "Saving..." : "Join the waitlist"}
                   </button>
-
-                  {/* <p className="text-center text-xs leading-5 text-slate-500">
-                    This preview does not store or transmit your details.
-                    Waitlist storage must be connected before launch.
-                  </p> */}
                 </form>
-              </>
+              </div>
             )}
           </div>
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="border-t border-slate-200 px-5 py-8 sm:px-8">
-        <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 text-center sm:flex-row">
-          <Link href="/" className="text-xl font-extrabold">
-            WALE<span style={{ color: burgundy }}>.</span>
-          </Link>
-          <p className="text-sm text-slate-500">
-            Making housing connections simpler.
-          </p>
-          <p className="text-sm text-slate-500">
-            © {new Date().getFullYear()} WALE Housing
-          </p>
-        </div>
-      </footer>
-    </main>
+        </section>
+      </main>
+      <Footer />
+    </>
   );
 }

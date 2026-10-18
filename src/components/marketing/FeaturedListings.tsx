@@ -13,10 +13,10 @@ import { Button, EmptyState, ErrorState } from "@/components/ui";
  * also gives us the loading and error branches the brief asks for
  * without hand-rolling state.
  */
-export function FeaturedListings() {
+export function FeaturedListings({ limit = 6 }: { limit?: number }) {
   const { data, isPending, isError, refetch } = useProperties({
     verifiedOnly: true,
-    pageSize: 6,
+    pageSize: limit,
   });
 
   if (isError) {
@@ -40,7 +40,7 @@ export function FeaturedListings() {
         aria-label="Loading featured listings"
         className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3"
       >
-        {Array.from({ length: 6 }).map((_, i) => (
+        {Array.from({ length: limit }).map((_, i) => (
           <PropertyCardSkeleton key={i} />
         ))}
       </div>

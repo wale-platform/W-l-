@@ -9,14 +9,14 @@ import type { Property } from "@/lib/api/schemas";
  * sources — so the UI is exercised against data shaped like production
  * rather than lorem ipsum.
  *
- * Imagery is served from `public/listings/` rather than a stock-photo
- * CDN, so the mock layer renders identically offline, in CI, and behind
- * a restricted network. Real photography arrives via Cloudinary in the
- * property module — `next.config.ts` already allows that host.
+ * Representative apartment photography is stored in `public/listings/`
+ * for reliable local rendering. These photos illustrate sample listings
+ * and are not photographs of the exact homes described.
  */
 
-/** Local placeholder photography, 1-indexed to match `public/listings/`. */
-const img = (n: number) => `/listings/listing-${String(n).padStart(2, "0")}.jpg`;
+/** Local sample photography, 1-indexed to match `public/listings/`. */
+const img = (n: number) =>
+  `/listings/listing-${String(n).padStart(2, "0")}.jpg?v=2`;
 
 export const properties: Property[] = [
   {
@@ -33,6 +33,8 @@ export const properties: Property[] = [
     state: "Kwara",
     university: "unilorin",
     verified: true,
+    featured: true,
+    availabilityStatus: "available",
     availableDate: "2026-09-01",
     images: [
       img(1),
@@ -60,6 +62,7 @@ export const properties: Property[] = [
     state: "Oyo",
     university: "ui",
     verified: true,
+    availabilityStatus: "occupied",
     availableDate: "2026-08-15",
     images: [img(4), img(5)],
     amenities: ["Furnished", "Water included", "Balcony", "Study desk", "Shared kitchen"],
@@ -83,6 +86,7 @@ export const properties: Property[] = [
     state: "Osun",
     university: "oau",
     verified: false,
+    availabilityStatus: "limited",
     availableDate: "2026-10-01",
     images: [img(6), img(7)],
     amenities: ["Parking space", "En-suite bathroom", "Fitted kitchen", "Security doors"],
@@ -106,6 +110,7 @@ export const properties: Property[] = [
     state: "Kaduna",
     university: "abu",
     verified: true,
+    availabilityStatus: "limited",
     availableDate: "2026-08-01",
     images: [img(8)],
     amenities: ["Shared kitchen", "Water tank", "Close to campus", "Caretaker on site"],

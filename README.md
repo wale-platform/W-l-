@@ -20,6 +20,7 @@ students and future housing seekers across Nigeria.
 | Server state | TanStack Query |
 | Client state | Zustand |
 | HTTP | Axios |
+| Interactive maps | Leaflet + OpenStreetMap |
 | Toasts | Sonner |
 | Icons | lucide-react |
 | Database | Neon PostgreSQL (`@neondatabase/serverless`) |
@@ -56,8 +57,8 @@ The app runs at `http://localhost:3000`.
 ```
 src/
   app/
-    (marketing)/       Public pages — Home, About, Contact, FAQ
-    api/               Route Handlers (the mock backend)
+    (marketing)/       Public pages — Home, About, Contact, FAQ, Match, Map
+    api/               Route Handlers (the mock backend and geocoder)
     layout.tsx         Root shell: fonts, metadata, providers, skip link
     not-found.tsx      Custom 404
     sitemap.ts robots.ts
@@ -147,12 +148,30 @@ navigating closes it during render. A `useEffect` calling `setState` on pathname
 change would work but costs an extra render pass and trips
 `react-hooks/set-state-in-effect`.
 
+### AI Match ranks listing preferences locally
+
+AI Match filters out homes that violate hard requirements such as a maximum
+budget, home type, bedroom count, or verification preference. It ranks the
+remaining listings by how well their details fit the preferred area and other
+selected preferences. Ranking is performed in the browser from listing data;
+preferences are not saved or sent to an AI provider.
+
+### Map search uses OpenStreetMap
+
+The property map is rendered with Leaflet and OpenStreetMap tiles. Location
+queries are sent to OpenStreetMap's Nominatim geocoder through
+`/api/geocode`; map attribution is shown in the interface. The geocoded point
+is used to show listings within 25 km when available. No map API key is
+required.
+
 ### Listing imagery is local
 
-Mock photography lives in `public/listings/` rather than a stock-photo CDN, so
-the app renders identically offline, in CI, and behind a restricted network.
-Production images will come from Cloudinary — `next.config.ts` already allows
-that host in `images.remotePatterns`.
+Representative Unsplash apartment and house photography lives in
+`public/listings/`, including the homepage hero, so the app renders without a
+stock-photo CDN. These images illustrate sample listings and are not
+photographs of the exact homes described. Production listing images will come
+from Cloudinary — `next.config.ts` already allows that host in
+`images.remotePatterns`.
 
 ---
 
@@ -195,15 +214,15 @@ the actual control:
 Defined in `src/app/globals.css` under `@theme`. Tailwind v4 is CSS-first —
 **there is no `tailwind.config.js` and none should be created.**
 
-The green scale is derived from the logo: `--color-brand-950` (`#0b3b2e`) is the
-dark building, `--color-brand-500` (`#2e8b57`) the lighter one. Alongside it sit
-a warm `sand` accent, an `ink` neutral ramp, semantic
+The burgundy scale is derived from the supplied WALE logo:
+`--color-brand-800` (`#7a1737`) is the primary mark color, with a warm `sand`
+accent, an `ink` neutral ramp, semantic
 `success`/`warning`/`danger`/`info` pairs, and radius/shadow/easing scales.
 
-The logo itself is hand-authored inline SVG (`src/components/brand/Logo.tsx`) —
-it inherits `currentColor`, scales crisply, needs no network request, and causes
-no layout shift. To swap in a real asset, repoint that one component; nothing
-else imports it.
+The supplied logo artwork is rendered as crisp inline SVG in
+`src/components/brand/Logo.tsx`, with a matching app icon. The shared component
+keeps the mark consistent across the landing page, navigation, dashboards, and
+auth pages.
 
 ---
 
@@ -225,13 +244,13 @@ This version differs from older tutorials in ways that matter here:
 ## Status
 
 **Shipped** — design tokens and brand, component library, layout shell, mock API
-with Zod-validated fixtures, and the public pages (Home, About, Contact, FAQ,
-404) with `sitemap.ts` and `robots.ts`.
+with Zod-validated fixtures, public pages, preference-based AI Match, and an
+interactive postcode/location map search with `sitemap.ts` and `robots.ts`.
 
 **Next** — authentication (login, register, forgot password, email verification,
 cookie route handlers, `proxy.ts` guarding), then the student experience
-(dashboard, search with filters, listings grid, property details with gallery and
-Google Maps, profile management).
+(dashboard, search with filters, listings grid, property details with gallery,
+profile management).
 
 Google Maps and Cloudinary are configured for but not yet exercised; both need
 API keys.
