@@ -10,8 +10,36 @@ import type {
   Marker,
   Popup,
 } from "leaflet";
+import { z } from "zod";
 import { propertyListResponseSchema, type Property } from "@/lib/api/schemas";
 import { formatRent } from "@/lib/utils/format";
+
+const routeResponseSchema = z.object({
+  code: z.string(),
+  routes: z.array(
+    z.object({
+      distance: z.number().nonnegative(),
+      duration: z.number().nonnegative(),
+      geometry: z.object({
+        coordinates: z.array(z.tuple([z.number(), z.number()])).min(2),
+      }),
+      legs: z.array(
+        z.object({
+          steps: z.array(
+            z.object({
+              distance: z.number().nonnegative(),
+              name: z.string().nullish(),
+              maneuver: z.object({
+                type: z.string(),
+                modifier: z.string().nullish(),
+              }),
+            }),
+          ),
+        }),
+      ),
+    }),
+  ),
+});
 
 type MapListing = Pick<
   Property,
@@ -40,6 +68,26 @@ type SearchPoint = {
   lng: number;
   label: string;
 };
+
+type NavigationState =
+  | { status: "idle" }
+  | {
+      status: "locating" | "routing";
+      destinationTitle: string;
+    }
+  | {
+      status: "ready";
+      destinationTitle: string;
+      distance: number;
+      duration: number;
+      locationAccuracy: number;
+      steps: Array<{ instruction: string; distance: number }>;
+    }
+  | {
+      status: "error";
+      destinationTitle: string;
+      message: string;
+    };
 
 function distanceInKm(
   first: { lat: number; lng: number },
@@ -74,12 +122,76 @@ function getListingStatus(property: MapListing): ListingStatus {
   return property.availabilityStatus ?? "available";
 }
 
+function getNavigationErrorMessage(error: GeolocationPositionError) {
+  if (error.code === error.PERMISSION_DENIED) {
+    return "Allow location access in your browser to get directions.";
+  }
+  if (error.code === error.POSITION_UNAVAILABLE) {
+    return "Your location couldn't be determined. Check your device location settings and try again.";
+  }
+  return "Finding your location timed out. Please try again.";
+}
+
+function getManeuverInstruction(step: {
+  maneuver: { type: string; modifier?: string | null };
+  name?: string | null;
+}) {
+  const road = step.name?.trim();
+  const modifier = step.maneuver.modifier;
+  const instruction =
+    step.maneuver.type === "arrive"
+      ? "Arrive at your destination"
+      : step.maneuver.type === "depart"
+        ? "Start"
+        : step.maneuver.type === "turn" ||
+            step.maneuver.type === "end of road" ||
+            step.maneuver.type === "fork"
+          ? `${step.maneuver.type === "fork" ? "Keep" : "Turn"}${modifier ? ` ${modifier}` : ""}`
+          : step.maneuver.type === "roundabout" ||
+              step.maneuver.type === "rotary"
+            ? "Enter the roundabout"
+            : step.maneuver.type === "exit roundabout" ||
+                step.maneuver.type === "exit rotary"
+              ? "Exit the roundabout"
+              : step.maneuver.type === "merge"
+                ? "Merge"
+                : step.maneuver.type === "on ramp"
+                  ? "Take the ramp"
+                  : step.maneuver.type === "off ramp"
+                    ? "Take the exit"
+                    : "Continue";
+
+  if (step.maneuver.type === "arrive") return instruction;
+  if (step.maneuver.type === "depart") return road ? `${instruction} on ${road}` : instruction;
+  return road ? `${instruction} onto ${road}` : instruction;
+}
+
+function formatRouteDistance(meters: number) {
+  return meters < 1_000
+    ? `${Math.round(meters)} m`
+    : `${(meters / 1_000).toFixed(1)} km`;
+}
+
+function formatRouteDuration(seconds: number) {
+  const minutes = Math.ceil(seconds / 60);
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return remainingMinutes ? `${hours} hr ${remainingMinutes} min` : `${hours} hr`;
+}
+
 export function MapSearch({ initialLocation = "" }: { initialLocation?: string }) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapInstance = useRef<LeafletMap | null>(null);
   const propertyMarkers = useRef<LayerGroup | null>(null);
+  const navigationLayers = useRef<LayerGroup | null>(null);
+  const navigationRequestId = useRef(0);
+  const routeRequest = useRef<AbortController | null>(null);
   const propertyMarkersById = useRef(
-    new Map<string, { marker: Marker; popup: Popup }>(),
+    new Map<
+      string,
+      { marker: Marker; popup: Popup; openPopup: () => void; closePopup: () => void }
+    >(),
   );
   const leaflet = useRef<typeof import("leaflet") | null>(null);
   const lastInitialLocation = useRef<string | null>(null);
@@ -92,6 +204,9 @@ export function MapSearch({ initialLocation = "" }: { initialLocation?: string }
   const [error, setError] = useState("");
   const [mapError, setMapError] = useState("");
   const [propertiesError, setPropertiesError] = useState("");
+  const [navigation, setNavigation] = useState<NavigationState>({
+    status: "idle",
+  });
 
   const findLocation = useCallback(async (query: string) => {
     const trimmedQuery = query.trim();
@@ -140,6 +255,150 @@ export function MapSearch({ initialLocation = "" }: { initialLocation?: string }
     } finally {
       setIsSearching(false);
     }
+  }, []);
+
+  const startNavigation = useCallback(
+    (destination: MapListing) => {
+      const L = leaflet.current;
+      const map = mapInstance.current;
+      const layers = navigationLayers.current;
+      const destinationCoordinates = destination.coordinates;
+      const requestId = ++navigationRequestId.current;
+      routeRequest.current?.abort();
+
+      if (!L || !map || !layers || !destinationCoordinates) {
+        setNavigation({
+          status: "error",
+          destinationTitle: destination.title,
+          message: "The map isn't ready for directions yet. Please try again.",
+        });
+        return;
+      }
+      if (!navigator.geolocation) {
+        setNavigation({
+          status: "error",
+          destinationTitle: destination.title,
+          message: "Location access isn't available in this browser.",
+        });
+        return;
+      }
+
+      layers.clearLayers();
+      map.closePopup();
+      setNavigation({ status: "locating", destinationTitle: destination.title });
+
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          if (requestId !== navigationRequestId.current) return;
+
+          setNavigation({ status: "routing", destinationTitle: destination.title });
+          const controller = new AbortController();
+          routeRequest.current = controller;
+          const { latitude, longitude } = position.coords;
+          const { lat, lng } = destinationCoordinates;
+          const routeUrl = new URL(
+            `https://router.project-osrm.org/route/v1/driving/${longitude},${latitude};${lng},${lat}`,
+          );
+          routeUrl.searchParams.set("overview", "full");
+          routeUrl.searchParams.set("geometries", "geojson");
+          routeUrl.searchParams.set("steps", "true");
+
+          void (async () => {
+            try {
+              const response = await fetch(routeUrl, {
+                signal: controller.signal,
+              });
+              if (!response.ok) {
+                throw new Error("The route service is unavailable. Please try again.");
+              }
+
+              const parsed = routeResponseSchema.safeParse(await response.json());
+              if (!parsed.success) {
+                throw new Error("The route service returned invalid directions.");
+              }
+              if (parsed.data.code !== "Ok" || !parsed.data.routes[0]) {
+                throw new Error("No driving route was found to this home.");
+              }
+
+              const route = parsed.data.routes[0];
+              const routeCoordinates = route.geometry.coordinates.map(
+                ([routeLongitude, routeLatitude]) =>
+                  L.latLng(routeLatitude, routeLongitude),
+              );
+              const routeLine = L.polyline(routeCoordinates, {
+                color: "#7a1737",
+                weight: 6,
+                opacity: 0.85,
+              }).addTo(layers);
+              L.circle([latitude, longitude], {
+                radius: position.coords.accuracy,
+                color: "#175cd3",
+                weight: 1,
+                fillColor: "#175cd3",
+                fillOpacity: 0.12,
+              }).addTo(layers);
+              L.circleMarker([latitude, longitude], {
+                radius: 8,
+                color: "#ffffff",
+                weight: 3,
+                fillColor: "#175cd3",
+                fillOpacity: 1,
+              })
+                .bindTooltip(
+                  `Your location (±${Math.round(position.coords.accuracy)} m GPS accuracy)`,
+                )
+                .addTo(layers);
+              map.fitBounds(routeLine.getBounds(), {
+                padding: [36, 36],
+                maxZoom: 15,
+              });
+
+              setNavigation({
+                status: "ready",
+                destinationTitle: destination.title,
+                distance: route.distance,
+                duration: route.duration,
+                locationAccuracy: position.coords.accuracy,
+                steps: route.legs.flatMap((leg) =>
+                  leg.steps.map((step) => ({
+                    instruction: getManeuverInstruction(step),
+                    distance: step.distance,
+                  })),
+                ),
+              });
+            } catch (cause) {
+              if (controller.signal.aborted) return;
+              setNavigation({
+                status: "error",
+                destinationTitle: destination.title,
+                message:
+                  cause instanceof Error
+                    ? cause.message
+                    : "We couldn't get directions. Please try again.",
+              });
+            }
+          })();
+        },
+        (cause) => {
+          if (requestId !== navigationRequestId.current) return;
+          setNavigation({
+            status: "error",
+            destinationTitle: destination.title,
+            message: getNavigationErrorMessage(cause),
+          });
+        },
+        { enableHighAccuracy: true, timeout: 20_000, maximumAge: 0 },
+      );
+    },
+    [],
+  );
+
+  const clearNavigation = useCallback(() => {
+    navigationRequestId.current += 1;
+    routeRequest.current?.abort();
+    routeRequest.current = null;
+    navigationLayers.current?.clearLayers();
+    setNavigation({ status: "idle" });
   }, []);
 
   useEffect(() => {
@@ -241,6 +500,7 @@ export function MapSearch({ initialLocation = "" }: { initialLocation?: string }
           maxZoom: 19,
         }).addTo(map);
         propertyMarkers.current = L.layerGroup().addTo(map);
+        navigationLayers.current = L.layerGroup().addTo(map);
         mapInstance.current = map;
         setMapReady(true);
       } catch (cause) {
@@ -253,6 +513,10 @@ export function MapSearch({ initialLocation = "" }: { initialLocation?: string }
     return () => {
       disposed = true;
       propertyMarkers.current = null;
+      navigationLayers.current = null;
+      navigationRequestId.current += 1;
+      routeRequest.current?.abort();
+      routeRequest.current = null;
       markersById.clear();
       mapInstance.current = null;
       map?.remove();
@@ -304,17 +568,19 @@ export function MapSearch({ initialLocation = "" }: { initialLocation?: string }
         iconAnchor: [10, 18],
       });
       const status = getListingStatus(property);
-      const popup = document.createElement("a");
-      popup.href = `/properties/${encodeURIComponent(property.id)}`;
+      const popup = document.createElement("div");
       popup.className = "wale-map-popup-card";
-      popup.setAttribute("aria-label", `View ${property.title}`);
+      const propertyLink = document.createElement("a");
+      propertyLink.href = `/properties/${encodeURIComponent(property.id)}`;
+      propertyLink.className = "wale-map-popup-details-link";
+      propertyLink.setAttribute("aria-label", `View ${property.title}`);
       if (property.images[0]) {
         const image = document.createElement("img");
         image.src = property.images[0];
         image.alt = property.title;
         image.loading = "lazy";
         image.className = "wale-map-popup-image";
-        popup.append(image);
+        propertyLink.append(image);
       }
       const content = document.createElement("div");
       content.className = "wale-map-popup-content";
@@ -331,7 +597,18 @@ export function MapSearch({ initialLocation = "" }: { initialLocation?: string }
       price.className = "wale-map-popup-price";
       price.textContent = formatRent(property.price);
       content.append(statusBadge, title, details, price);
-      popup.append(content);
+      propertyLink.append(content);
+      const directions = document.createElement("button");
+      directions.type = "button";
+      directions.className = "wale-map-popup-directions";
+      directions.setAttribute("aria-label", `Take me to ${property.title}`);
+      directions.textContent = "Take me there";
+      directions.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        startNavigation(property);
+      });
+      popup.append(propertyLink, directions);
 
       const marker = L.marker([property.coordinates.lat, property.coordinates.lng], {
         icon: propertyIcon,
@@ -340,18 +617,35 @@ export function MapSearch({ initialLocation = "" }: { initialLocation?: string }
       }).addTo(markers);
       const propertyPopup = L.popup({
         closeButton: false,
-        maxWidth: 260,
-        minWidth: 220,
-        autoPan: true,
-        autoPanPaddingTopLeft: [16, 160],
-        autoPanPaddingBottomRight: [16, 24],
+        maxWidth: 190,
+        minWidth: 170,
+        autoPan: false,
         className: "wale-map-property-popup",
       }).setContent(popup);
       let closePopupTimer: ReturnType<typeof setTimeout> | undefined;
       const openPropertyPopup = () => {
         if (closePopupTimer) clearTimeout(closePopupTimer);
         propertyPopup.setLatLng(marker.getLatLng()).openOn(map);
+        const popupElement = propertyPopup.getElement();
+        if (!popupElement) return;
+
+        const markerPoint = map.latLngToContainerPoint(marker.getLatLng());
+        const popupHeight = popupElement.offsetHeight;
+        const mapHeight = map.getSize().y;
+        const spaceAbove = markerPoint.y;
+        const spaceBelow = mapHeight - markerPoint.y;
+        const fitsAbove = spaceAbove >= popupHeight + 12;
+        const fitsBelow = spaceBelow >= popupHeight + 12;
+        const placeBelow =
+          !fitsAbove && (fitsBelow || spaceBelow > spaceAbove);
+
+        propertyPopup.options.offset = L.point(
+          0,
+          placeBelow ? popupHeight + 12 : 7,
+        );
+        propertyPopup.update();
       };
+      const closePropertyPopup = () => map.closePopup(propertyPopup);
       const schedulePopupClose = (event: LeafletMouseEvent) => {
         if (closePopupTimer) clearTimeout(closePopupTimer);
         closePopupTimer = setTimeout(() => {
@@ -366,6 +660,9 @@ export function MapSearch({ initialLocation = "" }: { initialLocation?: string }
       };
       marker.on("mouseover", openPropertyPopup);
       marker.on("mouseout", schedulePopupClose);
+      if (window.matchMedia("(hover: none)").matches) {
+        marker.on("click", openPropertyPopup);
+      }
       propertyPopup.on("mouseover", () => {
         if (closePopupTimer) clearTimeout(closePopupTimer);
       });
@@ -373,9 +670,11 @@ export function MapSearch({ initialLocation = "" }: { initialLocation?: string }
       propertyMarkersById.current.set(property.id, {
         marker,
         popup: propertyPopup,
+        openPopup: openPropertyPopup,
+        closePopup: closePropertyPopup,
       });
     }
-  }, [mapReady, properties, searchPoint]);
+  }, [mapReady, properties, searchPoint, startNavigation]);
 
   const nearbyProperties = useMemo(() => {
     if (!searchPoint) return properties;
@@ -510,6 +809,87 @@ export function MapSearch({ initialLocation = "" }: { initialLocation?: string }
         </div>
 
         <aside aria-labelledby="map-results-title" className="min-w-0">
+          {navigation.status !== "idle" && (
+            <section
+              aria-labelledby="navigation-title"
+              aria-live="polite"
+              className="mb-5 rounded-2xl border border-brand-200 bg-white p-4 shadow-sm"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h2
+                    id="navigation-title"
+                    className="text-sm font-bold text-ink-900"
+                  >
+                    Directions to {navigation.destinationTitle}
+                  </h2>
+                  <p className="mt-1 text-xs text-ink-500">
+                    Your location is sent to the routing service for directions;
+                    WALE doesn&apos;t store it.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={clearNavigation}
+                  className="shrink-0 rounded-field px-2 py-1 text-xs font-semibold text-brand-800 hover:bg-brand-50"
+                >
+                  Clear route
+                </button>
+              </div>
+
+              {(navigation.status === "locating" ||
+                navigation.status === "routing") && (
+                <p role="status" className="mt-3 text-sm text-ink-600">
+                  {navigation.status === "locating"
+                    ? "Getting your location…"
+                    : "Finding the best driving route…"}
+                </p>
+              )}
+
+              {navigation.status === "error" && (
+                <p role="alert" className="mt-3 text-sm text-danger">
+                  {navigation.message}
+                </p>
+              )}
+
+              {navigation.status === "ready" && (
+                <>
+                  <div className="mt-3 flex gap-4 text-sm font-semibold text-ink-800">
+                    <span>{formatRouteDistance(navigation.distance)}</span>
+                    <span>{formatRouteDuration(navigation.duration)} drive</span>
+                  </div>
+                  <p className="mt-1 text-xs text-ink-500">
+                    GPS accuracy: ±{Math.round(navigation.locationAccuracy)} m
+                  </p>
+                  <ol
+                    aria-label="Driving directions"
+                    className="mt-3 max-h-64 space-y-2 overflow-y-auto border-t border-ink-100 pt-3"
+                  >
+                    {navigation.steps.map((step, index) => (
+                      <li
+                        key={`${index}-${step.instruction}`}
+                        className="flex items-start gap-2 text-xs leading-5 text-ink-700"
+                      >
+                        <span
+                          aria-hidden="true"
+                          className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-brand-50 text-[10px] font-bold text-brand-800"
+                        >
+                          {index + 1}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          {step.instruction}
+                        </span>
+                        <span className="shrink-0 text-ink-500">
+                          {formatRouteDistance(step.distance)}
+                        </span>
+                      </li>
+                    ))}
+                  </ol>
+                </>
+              )}
+            </section>
+          )}
+
           <div className="flex items-center justify-between gap-3">
             <div>
               <h2
@@ -554,27 +934,19 @@ export function MapSearch({ initialLocation = "" }: { initialLocation?: string }
                     href={`/properties/${encodeURIComponent(property.id)}`}
                     onMouseEnter={() => {
                       const entry = propertyMarkersById.current.get(property.id);
-                      const map = mapInstance.current;
-                      if (entry && map) {
-                        entry.popup.setLatLng(entry.marker.getLatLng()).openOn(map);
-                      }
+                      if (entry) entry.openPopup();
                     }}
                     onMouseLeave={() => {
                       const entry = propertyMarkersById.current.get(property.id);
-                      const map = mapInstance.current;
-                      if (entry && map) map.closePopup(entry.popup);
+                      if (entry) entry.closePopup();
                     }}
                     onFocus={() => {
                       const entry = propertyMarkersById.current.get(property.id);
-                      const map = mapInstance.current;
-                      if (entry && map) {
-                        entry.popup.setLatLng(entry.marker.getLatLng()).openOn(map);
-                      }
+                      if (entry) entry.openPopup();
                     }}
                     onBlur={() => {
                       const entry = propertyMarkersById.current.get(property.id);
-                      const map = mapInstance.current;
-                      if (entry && map) map.closePopup(entry.popup);
+                      if (entry) entry.closePopup();
                     }}
                     className="flex items-center gap-3 rounded-xl border border-ink-200 p-2.5 transition hover:border-brand-300 hover:bg-brand-50/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-700"
                   >

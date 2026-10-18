@@ -178,7 +178,7 @@
   }
 
   .wale-map-property-popup .leaflet-popup-content {
-    width: 220px !important;
+    width: 170px !important;
     margin: 0;
   }
 
@@ -190,43 +190,74 @@
     text-decoration: none;
   }
 
+  .wale-map-popup-details-link {
+    display: block;
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .wale-map-popup-directions {
+    display: block;
+    width: calc(100% - 1rem);
+    margin: 0 0.5rem 0.5rem;
+    border-radius: 0.4rem;
+    border: 0;
+    background: #7a1737;
+    padding: 0.4rem 0.6rem;
+    color: #fff;
+    cursor: pointer;
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-align: center;
+    text-decoration: none;
+  }
+
+  .wale-map-popup-directions:hover,
+  .wale-map-popup-directions:focus-visible {
+    background: #5e112a;
+  }
+
   .wale-map-popup-image {
     display: block;
     width: 100%;
-    height: 112px;
+    height: 60px;
     object-fit: cover;
   }
 
   .wale-map-popup-content {
     display: grid;
-    gap: 0.35rem;
-    padding: 0.7rem;
+    gap: 0.15rem;
+    padding: 0.4rem;
   }
 
   .wale-map-popup-status {
     width: fit-content;
     border-radius: 9999px;
-    padding: 0.15rem 0.5rem;
+    padding: 0.1rem 0.4rem;
     color: #fff;
-    font-size: 0.7rem;
+    font-size: 0.62rem;
     font-weight: 700;
   }
 
   .wale-map-popup-title {
-    font-size: 0.875rem;
+    font-size: 0.72rem;
     font-weight: 700;
     line-height: 1.25;
   }
 
   .wale-map-popup-details {
+    overflow: hidden;
     color: #667085;
-    font-size: 0.75rem;
+    font-size: 0.64rem;
     line-height: 1.4;
+    margin: 0;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .wale-map-popup-price {
     color: #7a1737;
-    font-size: 0.875rem;
+    font-size: 0.72rem;
     font-weight: 700;
   }
 }
