@@ -1,58 +1,70 @@
 "use client";
 
-import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Container, Section, SectionHeading } from "@/components/layout/Container";
-import { Card, CardBody, CardHeader, CardTitle, Badge, Button, toast } from "@/components/ui";
+import { Alert, Badge, Button, Card, CardBody, CardHeader, CardTitle, toast } from "@/components/ui";
+import { propertyApi } from "@/lib/api/property";
+import { reportsApi, type UserReport } from "@/lib/api/reports";
 import { AlertTriangle, Check, ShieldAlert } from "lucide-react";
 
-interface Report {
-  id: string;
-  reporter: string;
-  reportedItem: string;
-  reason: string;
-  details: string;
-  status: "OPEN" | "RESOLVED";
-  createdAt: string;
-}
-
-const DEFAULT_REPORTS: Report[] = [
-  {
-    id: "rep-001",
-    reporter: "Tunde Olowo (Student)",
-    reportedItem: "Modern self-contained studio at Tanke",
-    reason: "Incorrect pricing / misleading information",
-    details: "Landlord claims price is ₦850k on the site, but requested ₦950k in person during inspection.",
-    status: "OPEN",
-    createdAt: "2026-08-22T10:00:00Z",
-  },
-  {
-    id: "rep-002",
-    reporter: "Amina Bello (Student)",
-    reportedItem: "Shared 2-bedroom flat near UI Second Gate",
-    reason: "Fake agent / listing",
-    details: "This property is already occupied. The uploader is not the owner or legal representative.",
-    status: "OPEN",
-    createdAt: "2026-08-23T14:20:00Z",
-  },
-];
-
 export default function AdminReportsPage() {
-  const [reports, setReports] = useState<Report[]>(DEFAULT_REPORTS);
+  const queryClient = useQueryClient();
+  const { data: reports = [], isLoading, isError } = useQuery({
+    queryKey: ["adminReports"],
+    queryFn: () => reportsApi.listReports(),
+  });
 
-  const handleResolve = (id: string) => {
-    const updated = reports.map((r) => (r.id === id ? { ...r, status: "RESOLVED" as const } : r));
-    setReports(updated);
-    toast.success("Report resolved", { description: "The issue has been marked as resolved." });
-  };
+  const resolveMutation = useMutation({
+    mutationFn: (id: string) => reportsApi.updateStatus(id, "RESOLVED"),
+    onSuccess: () => {
+      toast.success("Report resolved", { description: "The issue has been marked as resolved." });
+      queryClient.invalidateQueries({ queryKey: ["adminReports"] });
+    },
+    onError: (error) => {
+      toast.error("Could not resolve report", {
+        description: error instanceof Error ? error.message : "Please try again.",
+      });
+    },
+  });
 
-  const handleDeleteListing = (id: string, itemName: string) => {
-    if (confirm(`Are you sure you want to remove the reported listing "${itemName}"?`)) {
-      // Filter out the report from list or mark resolved
-      const updated = reports.filter((r) => r.id !== id);
-      setReports(updated);
-      toast.success("Listing removed", { description: "The reported listing was taken down successfully." });
-    }
-  };
+  const takeDownMutation = useMutation({
+    mutationFn: async (report: UserReport) => {
+      const { properties } = await propertyApi.list({});
+      const reportedTitle = report.reportedItem.trim().toLocaleLowerCase();
+      const property = properties.find(
+        (item) => item.title.trim().toLocaleLowerCase() === reportedTitle,
+      );
+      if (!property) throw new Error("The reported listing could not be found; no data was removed.");
+
+      await propertyApi.delete(property.id);
+      await reportsApi.deleteReport(report.id);
+    },
+    onSuccess: () => {
+      toast.success("Listing taken down", { description: "The listing and its report have been removed." });
+      queryClient.invalidateQueries({ queryKey: ["adminReports"] });
+      queryClient.invalidateQueries({ queryKey: ["adminAllProperties"] });
+    },
+    onError: (error) => {
+      toast.error("Could not take down listing", {
+        description: error instanceof Error ? error.message : "Please try again.",
+      });
+    },
+  });
+
+  if (isLoading) {
+    return (
+      <main className="animate-pulse">
+        <Section>
+          <Container size="wide" className="flex flex-col gap-8">
+            <div className="h-10 w-64 rounded bg-ink-200" />
+            <div className="h-64 rounded-card bg-ink-200" />
+          </Container>
+        </Section>
+      </main>
+    );
+  }
+
+  const openCount = reports.filter((report) => report.status === "OPEN").length;
 
   return (
     <main>
@@ -60,86 +72,90 @@ export default function AdminReportsPage() {
         <Container size="wide" className="flex flex-col gap-8">
           <SectionHeading
             eyebrow="Admin"
-            title="View Reports"
-            lead="Review, inspect, and address user complaints about listings, pricing, and agent conduct."
+            title="User Reports"
+            lead="Review complaints about listings, pricing, and agent conduct."
           />
+
+          {isError && (
+            <Alert tone="danger" title="Reports could not be loaded">
+              Refresh the page to retry. Report data has not been changed.
+            </Alert>
+          )}
 
           <Card>
             <CardHeader>
-              <CardTitle>Platform Reports ({reports.filter(r => r.status === "OPEN").length} Open)</CardTitle>
+              <CardTitle>Platform Reports ({openCount} open)</CardTitle>
             </CardHeader>
-
             <CardBody>
               {reports.length === 0 ? (
                 <div className="flex flex-col items-center gap-4 py-16 text-center">
-                  <div className="size-16 rounded-full bg-emerald-50 text-emerald-700 flex items-center justify-center">
+                  <div className="flex size-16 items-center justify-center rounded-full bg-emerald-50 text-emerald-700">
                     <Check className="size-8" />
                   </div>
-                  <h3 className="text-lg font-semibold text-ink-900">All reports resolved</h3>
-                  <p className="text-sm text-ink-500">There are no pending user reports to review.</p>
+                  <h3 className="text-lg font-semibold text-ink-900">No reports to review</h3>
+                  <p className="text-sm text-ink-500">New user reports will appear here.</p>
                 </div>
               ) : (
                 <div className="flex flex-col gap-6">
-                  {reports.map((report) => (
-                    <div
-                      key={report.id}
-                      className={`p-5 rounded-xl border flex flex-col md:flex-row gap-5 justify-between items-start ${
-                        report.status === "RESOLVED"
-                          ? "bg-ink-50/50 border-ink-100 opacity-60"
-                          : "bg-amber-50/20 border-amber-200"
-                      }`}
-                    >
-                      <div className="flex items-start gap-4">
-                        <div
-                          className={`p-3 rounded-lg ${
-                            report.status === "RESOLVED"
-                              ? "bg-ink-100 text-ink-500"
-                              : "bg-amber-100 text-amber-700"
-                          }`}
-                        >
-                          <AlertTriangle className="size-6" />
-                        </div>
-                        <div className="flex-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <h3 className="font-semibold text-ink-950">{report.reason}</h3>
-                            <Badge tone={report.status === "OPEN" ? "warning" : "success"}>
-                              {report.status}
-                            </Badge>
+                  {reports.map((report) => {
+                    const isBusy = resolveMutation.isPending || takeDownMutation.isPending;
+                    return (
+                      <article
+                        key={report.id}
+                        className={`flex flex-col items-start justify-between gap-5 rounded-xl border p-5 md:flex-row ${
+                          report.status === "RESOLVED"
+                            ? "border-ink-100 bg-ink-50/50 opacity-70"
+                            : "border-amber-200 bg-amber-50/20"
+                        }`}
+                      >
+                        <div className="flex items-start gap-4">
+                          <div className={`rounded-lg p-3 ${report.status === "RESOLVED" ? "bg-ink-100 text-ink-500" : "bg-amber-100 text-amber-700"}`}>
+                            <AlertTriangle className="size-6" />
                           </div>
-                          <p className="text-sm text-ink-600 mt-1">
-                            Reported Listing: <strong className="text-ink-900">{report.reportedItem}</strong>
-                          </p>
-                          <p className="text-sm text-ink-500 mt-2 font-medium">
-                            Reporter: {report.reporter} | {new Date(report.createdAt).toLocaleDateString()}
-                          </p>
-                          <blockquote className="mt-3 p-3 bg-white/60 rounded border border-ink-100 text-sm text-ink-700 italic">
-                            "{report.details}"
-                          </blockquote>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <h3 className="font-semibold text-ink-950">{report.reason}</h3>
+                              <Badge tone={report.status === "OPEN" ? "warning" : "success"}>{report.status}</Badge>
+                            </div>
+                            <p className="mt-1 text-sm text-ink-600">
+                              Reported listing: <strong className="text-ink-900">{report.reportedItem}</strong>
+                            </p>
+                            <p className="mt-2 text-sm font-medium text-ink-500">
+                              Reporter: {report.reporter} · {new Date(report.createdAt).toLocaleDateString()}
+                            </p>
+                            <blockquote className="mt-3 rounded border border-ink-100 bg-white/60 p-3 text-sm italic text-ink-700">
+                              “{report.details}”
+                            </blockquote>
+                          </div>
                         </div>
-                      </div>
 
-                      {report.status === "OPEN" && (
-                        <div className="flex items-center gap-2 self-end md:self-start">
-                          <Button
-                            size="sm"
-                            tone="outline"
-                            className="flex items-center gap-1"
-                            onClick={() => handleResolve(report.id)}
-                          >
-                            <Check className="size-4" /> Resolve
-                          </Button>
-                          <Button
-                            size="sm"
-                            tone="danger"
-                            className="flex items-center gap-1"
-                            onClick={() => handleDeleteListing(report.id, report.reportedItem)}
-                          >
-                            <ShieldAlert className="size-4" /> Take Down Listing
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                        {report.status === "OPEN" && (
+                          <div className="flex shrink-0 flex-wrap items-center gap-2 self-end md:self-start">
+                            <Button
+                              size="sm"
+                              tone="outline"
+                              onClick={() => resolveMutation.mutate(report.id)}
+                              disabled={isBusy}
+                            >
+                              <Check className="size-4" /> Resolve
+                            </Button>
+                            <Button
+                              size="sm"
+                              tone="danger"
+                              onClick={() => {
+                                if (window.confirm(`Take down the reported listing "${report.reportedItem}"?`)) {
+                                  takeDownMutation.mutate(report);
+                                }
+                              }}
+                              disabled={isBusy}
+                            >
+                              <ShieldAlert className="size-4" /> Take Down Listing
+                            </Button>
+                          </div>
+                        )}
+                      </article>
+                    );
+                  })}
                 </div>
               )}
             </CardBody>

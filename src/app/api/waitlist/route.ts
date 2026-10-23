@@ -42,6 +42,7 @@ export async function POST(request: Request) {
         role VARCHAR(20) NOT NULL CHECK (
           role IN ('student', 'tenant', 'landlord', 'lawyer')
         ),
+        status VARCHAR(20) NOT NULL DEFAULT 'new',
         consent_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
@@ -50,6 +51,11 @@ export async function POST(request: Request) {
     await sql`
       ALTER TABLE waitlist_signups
       ADD COLUMN IF NOT EXISTS phone VARCHAR(32)
+    `;
+
+    await sql`
+      ALTER TABLE waitlist_signups
+      ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'new'
     `;
 
     await sql`

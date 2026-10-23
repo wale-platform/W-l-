@@ -1,51 +1,74 @@
 "use client";
 
-import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { Container, Section, SectionHeading } from "@/components/layout/Container";
-import { Button, Card, CardBody, CardHeader, CardTitle, Badge } from "@/components/ui";
+import { Button, Card, CardBody, CardHeader, CardTitle, Badge, Alert } from "@/components/ui";
 import { propertyApi } from "@/lib/api/property";
-import { Home, Users, CheckSquare, ShieldAlert, ArrowRight } from "lucide-react";
+import { inspectionsApi } from "@/lib/api/inspections";
+import { reportsApi } from "@/lib/api/reports";
+import { DEFAULT_USERS } from "@/lib/api/auth";
+import { Home, Users, CheckSquare, ShieldAlert, ArrowRight, CalendarCheck, Flag, MailPlus } from "lucide-react";
 
 export default function AdminDashboardPage() {
-  // Fetch all properties (both verified and unverified)
-  const { data: propertiesData, isLoading } = useQuery({
+  const { data: propertiesData, isLoading, isError: listingsError } = useQuery({
     queryKey: ["adminAllProperties"],
     queryFn: () => propertyApi.list({}),
   });
+  const { data: inspections = [], isLoading: inspectionsLoading, isError: inspectionsError } = useQuery({
+    queryKey: ["adminInspections"],
+    queryFn: () => inspectionsApi.listRequests(),
+  });
+  const { data: reports = [], isLoading: reportsLoading, isError: reportsError } = useQuery({
+    queryKey: ["adminReports"],
+    queryFn: () => reportsApi.listReports(),
+  });
 
-  const [userCount, setUserCount] = useState(24);
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
+  const {
+    data: users = [],
+    isLoading: usersLoading,
+    isError: usersError,
+  } = useQuery({
+    queryKey: ["adminUsers"],
+    queryFn: () => {
       const stored = localStorage.getItem("wale_mock_registered_users");
-      if (stored) {
-        try {
-          const list = JSON.parse(stored);
-          setUserCount(list.length);
-        } catch (e) {}
+      if (!stored) {
+        localStorage.setItem("wale_mock_registered_users", JSON.stringify(DEFAULT_USERS));
+        return DEFAULT_USERS;
       }
-    }
-  }, []);
+      const savedUsers: unknown = JSON.parse(stored);
+      if (!Array.isArray(savedUsers)) throw new Error("Saved user data is not a list.");
+      return savedUsers as typeof DEFAULT_USERS;
+    },
+  });
 
   const properties = propertiesData?.properties || [];
   const totalListings = propertiesData?.total || 0;
   const pendingVerification = properties.filter((p) => !p.verified).length;
   const activeListings = properties.filter((p) => p.verified).length;
+  const pendingInspections = inspections.filter((request) => request.status === "PENDING").length;
+  const openReports = reports.filter((report) => report.status === "OPEN").length;
 
-  if (isLoading) {
+  if (
+    isLoading ||
+    inspectionsLoading ||
+    reportsLoading ||
+    usersLoading
+  ) {
     return (
       <main className="animate-pulse">
         <Section>
           <Container size="wide" className="flex flex-col gap-8">
-            <div className="h-10 w-64 bg-ink-200 rounded" />
-            <div className="grid gap-6 md:grid-cols-4">
-              {[1, 2, 3, 4].map((i) => (
+            <div className="h-10 w-72 bg-ink-200 rounded" />
+            <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-5">
+              {[1, 2, 3, 4, 5].map((i) => (
                 <div key={i} className="h-28 bg-ink-200 rounded-card" />
               ))}
             </div>
-            <div className="h-64 bg-ink-200 rounded-card" />
+            <div className="grid gap-6 lg:grid-cols-3">
+              <div className="h-64 bg-ink-200 rounded-card lg:col-span-2" />
+              <div className="h-64 bg-ink-200 rounded-card" />
+            </div>
           </Container>
         </Section>
       </main>
@@ -59,11 +82,16 @@ export default function AdminDashboardPage() {
           <SectionHeading
             eyebrow="Admin Dashboard"
             title="WALE Platform Administration"
-            lead="Oversee listings, verify properties, manage users, and review platform feedback."
+            lead="A single place to review listings, manage users and inspections, and respond to reports."
           />
 
-          {/* Stats Grid */}
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          {(listingsError || inspectionsError || reportsError || usersError) && (
+            <Alert tone="danger" title="Some dashboard data could not be loaded">
+              Refresh the page to retry loading the affected data.
+            </Alert>
+          )}
+
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
             <Card>
               <CardBody className="flex items-center gap-4">
                 <div className="p-3 bg-brand-50 text-brand-700 rounded-lg">
@@ -106,16 +134,32 @@ export default function AdminDashboardPage() {
                   <Users className="size-6" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-ink-900">{userCount}</p>
+                  <p className="text-2xl font-bold text-ink-900">{usersError ? "—" : users.length}</p>
                   <p className="text-xs text-ink-500 font-medium uppercase tracking-wider">Registered Users</p>
+                </div>
+              </CardBody>
+            </Card>
+
+            <Card>
+              <CardBody className="flex items-center gap-4">
+                <div className="p-3 bg-violet-50 text-violet-700 rounded-lg">
+                  <CalendarCheck className="size-6" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-ink-900">{pendingInspections}</p>
+                  <p className="text-xs text-ink-500 font-medium uppercase tracking-wider">Pending Inspections</p>
                 </div>
               </CardBody>
             </Card>
           </div>
 
           <div className="grid gap-6 lg:grid-cols-3">
-            {/* Recent Listings */}
             <div className="lg:col-span-2 flex flex-col gap-6">
+              {listingsError && (
+                <Alert tone="danger" title="Listings could not be loaded">
+                  Refresh the page to retry loading the listing overview.
+                </Alert>
+              )}
               <Card>
                 <CardHeader className="flex justify-between items-center">
                   <CardTitle>Recent Listing Submissions</CardTitle>
@@ -149,9 +193,39 @@ export default function AdminDashboardPage() {
                   )}
                 </CardBody>
               </Card>
+
+              <Card>
+                <CardHeader className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <CalendarCheck className="size-5 text-brand-700" />
+                    <CardTitle>Recent Inspection Requests</CardTitle>
+                  </div>
+                  <Link href="/admin/inspections" className="text-sm font-semibold text-brand-600 hover:text-brand-700 flex items-center gap-1">
+                    Manage all <ArrowRight className="size-4" />
+                  </Link>
+                </CardHeader>
+                <CardBody>
+                  {inspections.length === 0 ? (
+                    <p className="text-sm text-ink-500 text-center py-6">No inspection requests found.</p>
+                  ) : (
+                    <div className="divide-y divide-ink-100">
+                      {inspections.slice(0, 4).map((request) => (
+                        <div key={request.id} className="flex flex-wrap items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
+                          <div>
+                            <p className="font-semibold text-ink-950">{request.propertyTitle}</p>
+                            <p className="text-xs text-ink-500 mt-0.5">{request.date} · {request.time}</p>
+                          </div>
+                          <Badge tone={request.status === "PENDING" ? "warning" : request.status === "APPROVED" ? "success" : "neutral"}>
+                            {request.status}
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardBody>
+              </Card>
             </div>
 
-            {/* Quick Links / Actions */}
             <div>
               <Card>
                 <CardHeader>
@@ -173,8 +247,29 @@ export default function AdminDashboardPage() {
                       <Users className="size-4" /> View User Accounts
                     </Button>
                   </Link>
+                  <Link href="/admin/inspections" className="w-full">
+                    <Button block tone="outline" className="justify-start gap-2">
+                      <CalendarCheck className="size-4" /> Manage Inspections ({pendingInspections} pending)
+                    </Button>
+                  </Link>
+                  <Link href="/admin/waitlist" className="w-full">
+                    <Button block tone="outline" className="justify-start gap-2">
+                      <MailPlus className="size-4" /> Manage Waitlist
+                    </Button>
+                  </Link>
+                  <Link href="/admin/reports" className="w-full">
+                    <Button block tone="outline" className="justify-start gap-2">
+                      <Flag className="size-4" /> Review Reports ({openReports} open)
+                    </Button>
+                  </Link>
                 </CardBody>
               </Card>
+
+              {reports.length === 0 && !reportsLoading ? (
+                <Card className="mt-6">
+                  <CardBody className="text-sm text-ink-500">There are no user reports to review.</CardBody>
+                </Card>
+              ) : null}
             </div>
           </div>
         </Container>

@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { Check } from "lucide-react";
 import { Logo } from "@/components/brand/Logo";
 
 const benefits = [
@@ -11,7 +10,7 @@ const benefits = [
 
 export default function AuthLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="flex min-h-screen bg-white">
+    <div className="flex min-h-screen bg-[#f4f8f6]">
       {/* Left side - Brand/Marketing Pane (Hidden on Mobile/Tablet) */}
       <div className="relative hidden w-1/2 overflow-hidden bg-brand-950 lg:block">
         {/* Decorative radial gradient wash */}
@@ -47,7 +46,20 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
               {benefits.map((benefit, index) => (
                 <li key={index} className="flex items-start gap-3">
                   <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-brand-800 text-brand-300">
-                    <Check aria-hidden="true" className="size-3.5" />
+                    <svg
+                      aria-hidden="true"
+                      className="size-3.5"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                    >
+                      <path
+                        d="m5 12 4 4L19 6"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
                   </span>
                   <span className="text-sm font-medium text-brand-100">
                     {benefit}
@@ -67,9 +79,13 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
       </div>
 
       {/* Right side - Form Container */}
-      <div className="flex w-full flex-col justify-between px-6 py-8 sm:px-12 lg:w-1/2 xl:px-20">
+      <div className="relative flex w-full flex-col justify-between overflow-hidden px-4 py-5 sm:px-8 sm:py-8 lg:w-1/2 lg:px-10 xl:px-16">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(25,135,87,0.10),transparent_45%),radial-gradient(ellipse_at_bottom_left,rgba(25,135,87,0.07),transparent_40%)]"
+        />
         {/* Simple top bar with Back to Home button */}
-        <div className="flex items-center justify-between lg:justify-end">
+        <div className="relative flex items-center justify-between lg:justify-end">
           <Link
             href="/"
             className="block rounded-field focus-visible:outline-brand-600 lg:hidden"
@@ -87,12 +103,14 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
         </div>
 
         {/* Auth form center content */}
-        <div className="my-auto mx-auto w-full max-w-[440px] py-8">
-          {children}
+        <div className="relative my-auto mx-auto w-full max-w-[520px] py-8">
+          <div className="rounded-3xl border border-white/90 bg-white/95 p-5 shadow-[0_24px_80px_rgba(21,58,42,0.12)] backdrop-blur sm:p-8 xl:p-9">
+            {children}
+          </div>
         </div>
 
         {/* Simple Footer for Mobile/Tablet */}
-        <div className="text-center lg:hidden">
+        <div className="relative text-center lg:hidden">
           <p className="text-xs text-ink-400">
             © {new Date().getFullYear()} WALE Housing. All rights reserved.
           </p>

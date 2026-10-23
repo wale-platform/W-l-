@@ -34,7 +34,19 @@ npm install
 ```
 
 Copy `.env.example` to `.env.local` and set `DATABASE_URL` to the Neon
-PostgreSQL connection string. Keep `.env.local` private; it is ignored by Git.
+PostgreSQL connection string. For admin waitlist operations, also set
+`ADMIN_API_KEY` to a randomly generated secret of at least 32 characters.
+To enable Google sign-in, set `NEXT_PUBLIC_GOOGLE_CLIENT_ID` to a Web OAuth
+client ID created in Google Cloud Console. Add each local/deployed origin to the
+OAuth client's authorized JavaScript origins, then restart the app after
+changing the value.
+Keep `.env.local` private; it is ignored by Git.
+
+Generate a suitable key with Node.js:
+
+```bash
+node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"
+```
 
 ```bash
 npm run dev
@@ -100,10 +112,16 @@ NEXT_PUBLIC_API_BASE_URL=https://api.walehousing.ng
 
 Waitlist signups are stored by the server-side `/api/waitlist` handler in the
 Neon `waitlist_signups` table. The endpoint creates the table if needed and
-adds the phone column to an existing table if needed, preserving existing
+adds the phone and status columns to an existing table if needed, preserving existing
 signups. It validates submitted fields and treats an existing email as an
 already-recorded signup. The database URL is read only from the server-side
 `DATABASE_URL` environment variable.
+
+Admins can manage signup statuses and export filtered waitlist records as CSV
+from `/admin/waitlist`. The page requires the server-side `ADMIN_API_KEY`;
+enter it when prompted. The key is held in page memory only, and list/update
+requests are rejected unless the matching server environment variable is set.
+Keep the key private and rotate it if it is exposed.
 
 Nothing else changes. The handlers add ~600ms of latency on purpose, so loading
 skeletons are actually observable in development.

@@ -2,11 +2,15 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "@tanstack/react-query";
 import { loginSchema, type LoginData } from "@/lib/api/schemas";
 import { authApi } from "@/lib/api/auth";
+import { startGoogleSession } from "@/lib/auth/client-session";
+import { GoogleSignInButton } from "@/components/auth/GoogleSignInButton";
+import type { AuthUser } from "@/lib/api/auth";
 import {
   Button,
   FormField,
@@ -19,6 +23,20 @@ import {
 
 export default function LoginPage() {
   const router = useRouter();
+  const handleGoogleAuth = useCallback(
+    (user: AuthUser) => {
+      try {
+        const destination = startGoogleSession(user);
+        toast.success("Signed in with Google", { description: `Welcome, ${user.fullName}.` });
+        router.push(destination);
+      } catch (error) {
+        toast.error("Sign-in failed", {
+          description: error instanceof Error ? error.message : "Your account could not be saved.",
+        });
+      }
+    },
+    [router],
+  );
 
   const {
     register,
@@ -73,6 +91,22 @@ export default function LoginPage() {
           Welcome back! Redirecting you to the properties...
         </Alert>
       )}
+
+      <div className="flex flex-col gap-3">
+        <GoogleSignInButton
+          onAuthenticated={handleGoogleAuth}
+          buttonText="signin_with"
+          disabled={mutation.isPending}
+        />
+        <div className="relative py-1">
+          <div className="absolute inset-0 flex items-center" aria-hidden="true">
+            <span className="w-full border-t border-ink-200" />
+          </div>
+          <p className="relative mx-auto w-fit bg-white px-3 text-xs font-medium text-ink-400">
+            or log in with email
+          </p>
+        </div>
+      </div>
 
       <form
         onSubmit={handleSubmit((values) => mutation.mutate(values))}

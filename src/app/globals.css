@@ -182,6 +182,17 @@
     margin: 0;
   }
 
+  .wale-map-property-popup--below {
+    margin-top: 20px;
+    margin-bottom: 0;
+  }
+
+  .wale-map-property-popup--below .leaflet-popup-tip-container {
+    top: 0;
+    bottom: auto;
+    transform: rotate(180deg);
+  }
+
   .wale-map-popup-card {
     display: block;
     overflow: hidden;

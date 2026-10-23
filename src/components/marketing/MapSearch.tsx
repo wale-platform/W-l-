@@ -41,6 +41,38 @@ const routeResponseSchema = z.object({
   ),
 });
 
+const routeCoordinateSchema = z.tuple([
+  z.number().finite().min(-180).max(180),
+  z.number().finite().min(-90).max(90),
+]);
+
+const navigationSnapshotSchema = z.object({
+  version: z.literal(1),
+  destinationTitle: z.string().min(1),
+  destinationCoordinates: z.object({
+    lat: z.number().finite().min(-90).max(90),
+    lng: z.number().finite().min(-180).max(180),
+  }),
+  origin: z.object({
+    lat: z.number().finite().min(-90).max(90),
+    lng: z.number().finite().min(-180).max(180),
+    accuracy: z.number().finite().nonnegative(),
+  }),
+  distance: z.number().finite().nonnegative(),
+  duration: z.number().finite().nonnegative(),
+  routeCoordinates: z.array(routeCoordinateSchema).min(2),
+  steps: z.array(
+    z.object({
+      instruction: z.string(),
+      distance: z.number().finite().nonnegative(),
+    }),
+  ),
+});
+
+type NavigationSnapshot = z.infer<typeof navigationSnapshotSchema>;
+
+const navigationStorageKey = "wale-map-navigation-v1";
+
 type MapListing = Pick<
   Property,
   | "id"
@@ -204,9 +236,70 @@ export function MapSearch({ initialLocation = "" }: { initialLocation?: string }
   const [error, setError] = useState("");
   const [mapError, setMapError] = useState("");
   const [propertiesError, setPropertiesError] = useState("");
+  const [restoredNavigation, setRestoredNavigation] =
+    useState<NavigationSnapshot | null>(null);
+  const [navigationStorageError, setNavigationStorageError] = useState("");
   const [navigation, setNavigation] = useState<NavigationState>({
     status: "idle",
   });
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function restoreNavigation() {
+      let snapshot: NavigationSnapshot | null = null;
+      let errorMessage = "";
+      try {
+        const savedRoute = localStorage.getItem(navigationStorageKey);
+        if (!savedRoute) return;
+
+        const parsed = navigationSnapshotSchema.safeParse(
+          JSON.parse(savedRoute),
+        );
+        if (!parsed.success) {
+          try {
+            localStorage.removeItem(navigationStorageKey);
+          } catch (cause) {
+            console.error(
+              "WALE could not clear invalid saved directions",
+              cause,
+            );
+          }
+          errorMessage =
+            "Saved directions were invalid. Please request a new route.";
+        } else {
+          snapshot = parsed.data;
+        }
+      } catch (cause) {
+        console.error("WALE saved directions could not be restored", cause);
+        errorMessage =
+          "Saved directions couldn't be restored. You can request a new route.";
+      }
+
+      await Promise.resolve();
+      if (cancelled) return;
+
+      if (errorMessage) {
+        setNavigationStorageError(errorMessage);
+      }
+      if (snapshot) {
+        setRestoredNavigation(snapshot);
+        setNavigation({
+          status: "ready",
+          destinationTitle: snapshot.destinationTitle,
+          distance: snapshot.distance,
+          duration: snapshot.duration,
+          locationAccuracy: snapshot.origin.accuracy,
+          steps: snapshot.steps,
+        });
+      }
+    }
+
+    void restoreNavigation();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const findLocation = useCallback(async (query: string) => {
     const trimmedQuery = query.trim();
@@ -265,6 +358,16 @@ export function MapSearch({ initialLocation = "" }: { initialLocation?: string }
       const destinationCoordinates = destination.coordinates;
       const requestId = ++navigationRequestId.current;
       routeRequest.current?.abort();
+      setRestoredNavigation(null);
+      setNavigationStorageError("");
+      try {
+        localStorage.removeItem(navigationStorageKey);
+      } catch (cause) {
+        console.error("WALE could not clear previously saved directions", cause);
+        setNavigationStorageError(
+          "Previous directions couldn't be cleared from this browser.",
+        );
+      }
 
       if (!L || !map || !layers || !destinationCoordinates) {
         setNavigation({
@@ -321,51 +424,47 @@ export function MapSearch({ initialLocation = "" }: { initialLocation?: string }
               }
 
               const route = parsed.data.routes[0];
-              const routeCoordinates = route.geometry.coordinates.map(
-                ([routeLongitude, routeLatitude]) =>
-                  L.latLng(routeLatitude, routeLongitude),
-              );
-              const routeLine = L.polyline(routeCoordinates, {
-                color: "#7a1737",
-                weight: 6,
-                opacity: 0.85,
-              }).addTo(layers);
-              L.circle([latitude, longitude], {
-                radius: position.coords.accuracy,
-                color: "#175cd3",
-                weight: 1,
-                fillColor: "#175cd3",
-                fillOpacity: 0.12,
-              }).addTo(layers);
-              L.circleMarker([latitude, longitude], {
-                radius: 8,
-                color: "#ffffff",
-                weight: 3,
-                fillColor: "#175cd3",
-                fillOpacity: 1,
-              })
-                .bindTooltip(
-                  `Your location (±${Math.round(position.coords.accuracy)} m GPS accuracy)`,
-                )
-                .addTo(layers);
-              map.fitBounds(routeLine.getBounds(), {
-                padding: [36, 36],
-                maxZoom: 15,
-              });
-
-              setNavigation({
-                status: "ready",
+              const snapshot: NavigationSnapshot = {
+                version: 1,
                 destinationTitle: destination.title,
+                destinationCoordinates,
+                origin: {
+                  lat: latitude,
+                  lng: longitude,
+                  accuracy: position.coords.accuracy,
+                },
                 distance: route.distance,
                 duration: route.duration,
-                locationAccuracy: position.coords.accuracy,
+                routeCoordinates: route.geometry.coordinates,
                 steps: route.legs.flatMap((leg) =>
                   leg.steps.map((step) => ({
                     instruction: getManeuverInstruction(step),
                     distance: step.distance,
                   })),
                 ),
+              };
+
+              setRestoredNavigation(snapshot);
+              setNavigation({
+                status: "ready",
+                destinationTitle: snapshot.destinationTitle,
+                distance: snapshot.distance,
+                duration: snapshot.duration,
+                locationAccuracy: snapshot.origin.accuracy,
+                steps: snapshot.steps,
               });
+              try {
+                localStorage.setItem(
+                  navigationStorageKey,
+                  JSON.stringify(snapshot),
+                );
+                setNavigationStorageError("");
+              } catch (cause) {
+                console.error("WALE directions could not be saved", cause);
+                setNavigationStorageError(
+                  "Directions are ready, but this browser couldn't save them for your next visit.",
+                );
+              }
             } catch (cause) {
               if (controller.signal.aborted) return;
               setNavigation({
@@ -398,7 +497,17 @@ export function MapSearch({ initialLocation = "" }: { initialLocation?: string }
     routeRequest.current?.abort();
     routeRequest.current = null;
     navigationLayers.current?.clearLayers();
+    setRestoredNavigation(null);
     setNavigation({ status: "idle" });
+    setNavigationStorageError("");
+    try {
+      localStorage.removeItem(navigationStorageKey);
+    } catch (cause) {
+      console.error("WALE could not clear saved directions", cause);
+      setNavigationStorageError(
+        "Directions were cleared from the map but couldn't be removed from this browser.",
+      );
+    }
   }, []);
 
   useEffect(() => {
@@ -639,6 +748,10 @@ export function MapSearch({ initialLocation = "" }: { initialLocation?: string }
         const placeBelow =
           !fitsAbove && (fitsBelow || spaceBelow > spaceAbove);
 
+        popupElement.classList.toggle(
+          "wale-map-property-popup--below",
+          placeBelow,
+        );
         propertyPopup.options.offset = L.point(
           0,
           placeBelow ? popupHeight + 12 : 7,
@@ -675,6 +788,55 @@ export function MapSearch({ initialLocation = "" }: { initialLocation?: string }
       });
     }
   }, [mapReady, properties, searchPoint, startNavigation]);
+
+  useEffect(() => {
+    const L = leaflet.current;
+    const map = mapInstance.current;
+    const layers = navigationLayers.current;
+    if (!mapReady || !L || !map || !layers) return;
+
+    layers.clearLayers();
+    if (!restoredNavigation) return;
+
+    const routeLine = L.polyline(
+      restoredNavigation.routeCoordinates.map(([longitude, latitude]) =>
+        L.latLng(latitude, longitude),
+      ),
+      {
+        color: "#7a1737",
+        weight: 6,
+        opacity: 0.85,
+      },
+    ).addTo(layers);
+    L.circle(
+      [restoredNavigation.origin.lat, restoredNavigation.origin.lng],
+      {
+        radius: restoredNavigation.origin.accuracy,
+        color: "#175cd3",
+        weight: 1,
+        fillColor: "#175cd3",
+        fillOpacity: 0.12,
+      },
+    ).addTo(layers);
+    L.circleMarker(
+      [restoredNavigation.origin.lat, restoredNavigation.origin.lng],
+      {
+        radius: 8,
+        color: "#ffffff",
+        weight: 3,
+        fillColor: "#175cd3",
+        fillOpacity: 1,
+      },
+    )
+      .bindTooltip(
+        `Your location (±${Math.round(restoredNavigation.origin.accuracy)} m GPS accuracy)`,
+      )
+      .addTo(layers);
+    map.fitBounds(routeLine.getBounds(), {
+      padding: [36, 36],
+      maxZoom: 15,
+    });
+  }, [mapReady, properties, restoredNavigation, searchPoint]);
 
   const nearbyProperties = useMemo(() => {
     if (!searchPoint) return properties;
@@ -775,6 +937,15 @@ export function MapSearch({ initialLocation = "" }: { initialLocation?: string }
         </p>
       )}
 
+      {navigationStorageError && (
+        <p
+          role="status"
+          className="mx-auto mt-4 max-w-3xl rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900"
+        >
+          {navigationStorageError}
+        </p>
+      )}
+
       {searchPoint && (
         <p role="status" className="mx-auto mt-5 max-w-7xl text-sm text-ink-600">
           Showing homes within 25 km of{" "}
@@ -824,8 +995,8 @@ export function MapSearch({ initialLocation = "" }: { initialLocation?: string }
                     Directions to {navigation.destinationTitle}
                   </h2>
                   <p className="mt-1 text-xs text-ink-500">
-                    Your location is sent to the routing service for directions;
-                    WALE doesn&apos;t store it.
+                    Your location is sent to the routing service for directions.
+                    This route is stored only in this browser until you clear it.
                   </p>
                 </div>
                 <button

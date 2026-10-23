@@ -8,7 +8,9 @@ import {
   ShieldCheck,
   Home,
   Users,
+  CalendarCheck,
   AlertTriangle,
+  MailPlus,
   LogOut,
   Bell,
   Menu,
@@ -21,6 +23,8 @@ const navItems = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
   { href: "/admin/verification", label: "Verify Pending", icon: ShieldCheck },
   { href: "/admin/listings", label: "All Listings", icon: Home },
+  { href: "/admin/inspections", label: "Inspections", icon: CalendarCheck },
+  { href: "/admin/waitlist", label: "Waitlist", icon: MailPlus },
   { href: "/admin/users", label: "User Accounts", icon: Users },
   { href: "/admin/reports", label: "User Reports", icon: AlertTriangle },
 ];

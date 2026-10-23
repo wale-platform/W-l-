@@ -148,7 +148,7 @@ export const signUpFormSchema = z
       .string()
       .min(1, "Phone number is required")
       .regex(/^(\+234|0)[789]\d{9}$/, "Invalid Nigerian phone number"),
-    role: z.enum(["student", "landlord", "lawyer", "tenant", "admin"]).default("student"),
+    role: z.enum(["student", "landlord", "lawyer", "tenant"]).default("student"),
     password: z
       .string()
       .min(8, "Password must be at least 8 characters")

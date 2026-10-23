@@ -1,4 +1,4 @@
-import { loginSchema, type LoginData } from "./schemas";
+import { loginSchema, type LoginData, type SignUpFormData } from "./schemas";
 
 export type AuthUser = {
   id: string;
@@ -10,7 +10,20 @@ export type AuthUser = {
   createdAt: string;
 };
 
-export const DEFAULT_USERS = [
+interface StoredAuthUser {
+  id: string;
+  fullName?: string;
+  name?: string;
+  email: string;
+  role: AuthUser["role"];
+  password?: string;
+  phone?: string;
+  university?: string;
+  createdAt?: string;
+  authProvider?: "google";
+}
+
+export const DEFAULT_USERS: StoredAuthUser[] = [
   {
     id: "usr_abdul",
     fullName: "Abdurrahman Suleiman",
@@ -97,6 +110,68 @@ export const DEFAULT_USERS = [
   },
 ];
 
+function isAuthRole(role: unknown): role is AuthUser["role"] {
+  return (
+    role === "student" ||
+    role === "landlord" ||
+    role === "lawyer" ||
+    role === "tenant" ||
+    role === "admin"
+  );
+}
+
+function isAuthUser(value: unknown): value is AuthUser {
+  if (typeof value !== "object" || value === null) return false;
+  return (
+    "id" in value &&
+    typeof value.id === "string" &&
+    "email" in value &&
+    typeof value.email === "string" &&
+    "fullName" in value &&
+    typeof value.fullName === "string" &&
+    "role" in value &&
+    isAuthRole(value.role) &&
+    "createdAt" in value &&
+    typeof value.createdAt === "string" &&
+    (!("phone" in value) || typeof value.phone === "string") &&
+    (!("university" in value) || typeof value.university === "string")
+  );
+}
+
+function isStoredAuthUser(value: unknown): value is StoredAuthUser {
+  if (typeof value !== "object" || value === null) return false;
+  return (
+    "id" in value &&
+    typeof value.id === "string" &&
+    "email" in value &&
+    typeof value.email === "string" &&
+    "role" in value &&
+    isAuthRole(value.role) &&
+    (!("fullName" in value) || typeof value.fullName === "string") &&
+    (!("name" in value) || typeof value.name === "string") &&
+    (!("password" in value) || typeof value.password === "string") &&
+    (!("phone" in value) || typeof value.phone === "string") &&
+    (!("university" in value) || typeof value.university === "string") &&
+    (!("createdAt" in value) || typeof value.createdAt === "string")
+  );
+}
+
+function getStoredUsers(): StoredAuthUser[] {
+  if (typeof window === "undefined") return DEFAULT_USERS;
+
+  const storedUsers = localStorage.getItem("wale_mock_registered_users");
+  if (!storedUsers) {
+    localStorage.setItem("wale_mock_registered_users", JSON.stringify(DEFAULT_USERS));
+    return DEFAULT_USERS;
+  }
+
+  const users: unknown = JSON.parse(storedUsers);
+  if (!Array.isArray(users) || !users.every(isStoredAuthUser)) {
+    throw new Error("Saved account data is invalid. Clear the damaged account data and try again.");
+  }
+  return users;
+}
+
 export const authApi = {
   /**
    * Log in a user with email and password.
@@ -107,37 +182,23 @@ export const authApi = {
     // Mock network delay:
     await new Promise((resolve) => setTimeout(resolve, 1000));
 
-    // Get registered users from localStorage or initialize with DEFAULT_USERS
-    let users: any[] = [];
-    if (typeof window !== "undefined") {
-      const storedUsers = localStorage.getItem("wale_mock_registered_users");
-      if (storedUsers) {
-        try {
-          users = JSON.parse(storedUsers);
-        } catch (e) {
-          users = DEFAULT_USERS;
-          localStorage.setItem("wale_mock_registered_users", JSON.stringify(DEFAULT_USERS));
-        }
-      } else {
-        users = DEFAULT_USERS;
-        localStorage.setItem("wale_mock_registered_users", JSON.stringify(DEFAULT_USERS));
-      }
-    } else {
-      users = DEFAULT_USERS;
-    }
+    const users = getStoredUsers();
 
-    const found = users.find((u: any) => u.email.toLowerCase() === validated.email.toLowerCase());
+    const found = users.find((user) => user.email.toLowerCase() === validated.email.toLowerCase());
     if (!found) {
       throw new Error("Account not found. Please create an account before logging in.");
     }
 
+    if (!found.password) {
+      throw new Error("This account uses Google sign-in. Continue with Google to log in.");
+    }
     if (found.password !== validated.password) {
       throw new Error("Invalid email or password.");
     }
 
     const authUser: AuthUser = {
       id: found.id,
-      fullName: found.fullName || found.name,
+      fullName: found.fullName || found.name || found.email,
       email: found.email,
       phone: found.phone,
       role: found.role,
@@ -152,30 +213,56 @@ export const authApi = {
     };
   },
 
+  async loginWithGoogle(
+    credential: string,
+    accountRole: "student" | "landlord" | "lawyer" | "tenant" = "student",
+  ): Promise<{ message: string; user: AuthUser }> {
+    const response = await fetch("/api/auth/google", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ credential, role: accountRole }),
+    });
+
+    const result: unknown = await response.json();
+    if (!response.ok) {
+      const message =
+        typeof result === "object" &&
+        result !== null &&
+        "message" in result &&
+        typeof result.message === "string"
+          ? result.message
+          : "Google sign-in could not be completed.";
+      throw new Error(message);
+    }
+
+    if (
+      typeof result !== "object" ||
+      result === null ||
+      !("user" in result) ||
+      !isAuthUser(result.user)
+    ) {
+      throw new Error("Google sign-in returned an invalid account response.");
+    }
+
+    return {
+      message:
+        "message" in result && typeof result.message === "string"
+          ? result.message
+          : "Signed in with Google.",
+      user: result.user,
+    };
+  },
+
   /**
    * Register a new user account.
    */
-  async signUp(payload: any): Promise<{ message: string; user: AuthUser; token: string }> {
+  async signUp(payload: SignUpFormData): Promise<{ message: string; user: AuthUser; token: string }> {
     // Mock network delay:
     await new Promise((resolve) => setTimeout(resolve, 1000));
 
-    let users: any[] = [];
-    if (typeof window !== "undefined") {
-      const storedUsers = localStorage.getItem("wale_mock_registered_users");
-      if (storedUsers) {
-        try {
-          users = JSON.parse(storedUsers);
-        } catch (e) {
-          users = DEFAULT_USERS;
-        }
-      } else {
-        users = DEFAULT_USERS;
-      }
-    } else {
-      users = DEFAULT_USERS;
-    }
+    const users = getStoredUsers();
 
-    const emailExists = users.some((u: any) => u.email.toLowerCase() === payload.email.toLowerCase());
+    const emailExists = users.some((user) => user.email.toLowerCase() === payload.email.toLowerCase());
     if (emailExists) {
       throw new Error("This email is already in use. Please use a different email address.");
     }
