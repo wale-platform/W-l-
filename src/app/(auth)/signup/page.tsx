@@ -11,7 +11,7 @@ import { signUpFormSchema, type SignUpFormData } from "@/lib/api/schemas";
 import { authApi } from "@/lib/api/auth";
 import { dashboardPath, useSetSessionUser } from "@/lib/auth/client-session";
 import { GoogleAuthError } from "@/components/auth/GoogleAuthError";
-import { GoogleContinue } from "@/components/auth/GoogleContinue";
+import { GoogleContinuePanel, useGooglePending } from "@/components/auth/GoogleContinue";
 import { GoogleSignInButton } from "@/components/auth/GoogleSignInButton";
 import {
   Button,
@@ -31,7 +31,8 @@ const accountRoles: { value: AccountRole; label: string; description: string }[]
   { value: "tenant", label: "Outgoing tenant", description: "Find your next tenant" },
 ];
 
-export default function SignUpPage() {
+function SignUpForm() {
+  const google = useGooglePending();
   const router = useRouter();
   const roleOptionRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const setSessionUser = useSetSessionUser();
@@ -104,14 +105,18 @@ export default function SignUpPage() {
           Create your account
         </h1>
         <p className="text-sm leading-6 text-ink-500">
-          Choose how you&apos;ll use WALE, then set up your account.
+          {google.profile
+            ? "Choose how you'll use WALE, then continue to finish signing up with Google."
+            : "Choose how you'll use WALE, then set up your account."}
         </p>
       </div>
 
-      <Suspense fallback={null}>
-        <GoogleAuthError />
-        <GoogleContinue role={selectedRole} />
-      </Suspense>
+      <GoogleAuthError />
+      {google.expired && (
+        <Alert tone="info" title="Your Google sign-in expired">
+          Choose how you&apos;ll use WALE below, then sign up with Google again.
+        </Alert>
+      )}
 
       {mutation.isError && (
         <Alert tone="danger" title="Sign Up Failed">
@@ -203,6 +208,11 @@ export default function SignUpPage() {
           )}
         </fieldset>
 
+        {google.profile ? (
+          // Finishing a Google sign-up: only the account type is needed.
+          <GoogleContinuePanel profile={google.profile} role={selectedRole} />
+        ) : google.loading ? null : (
+        <>
         <div className="flex flex-col gap-3">
           <GoogleSignInButton mode="signup" accountRole={selectedRole} disabled={mutation.isPending} />
           <div className="relative py-1">
@@ -287,6 +297,8 @@ export default function SignUpPage() {
         >
           Create account
         </Button>
+        </>
+        )}
       </form>
 
       <p className="text-center text-sm text-ink-600">
@@ -299,5 +311,14 @@ export default function SignUpPage() {
         </Link>
       </p>
     </div>
+  );
+}
+
+export default function SignUpPage() {
+  // useSearchParams (Google hand-off) needs a Suspense boundary.
+  return (
+    <Suspense fallback={null}>
+      <SignUpForm />
+    </Suspense>
   );
 }

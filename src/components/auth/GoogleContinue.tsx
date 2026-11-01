@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Alert, Avatar, Button, toast } from "@/components/ui";
@@ -12,6 +13,11 @@ const roleLabels: Record<SignUpRole, string> = {
   lawyer: "property lawyer",
   tenant: "outgoing tenant",
 };
+
+export interface PendingGoogleProfile {
+  email: string;
+  fullName: string;
+}
 
 async function request(path: string, init?: RequestInit) {
   const response = await fetch(path, { credentials: "same-origin", cache: "no-store", ...init });
@@ -27,21 +33,31 @@ async function request(path: string, init?: RequestInit) {
 }
 
 /**
- * Shown on /signup?google=continue after someone signed in with a Google
- * account that has no WALE account yet: confirm the account type and create
- * the account in one click. Must be rendered inside <Suspense>.
+ * The Google account waiting to become a WALE account, on
+ * /signup?google=continue (after signing in with a Google account that has
+ * no WALE account). Must be used inside <Suspense> (reads search params).
  */
-export function GoogleContinue({ role }: { role: SignUpRole }) {
-  const router = useRouter();
-  const setSessionUser = useSetSessionUser();
+export function useGooglePending() {
   const active = useSearchParams().get("google") === "continue";
-
-  const pending = useQuery({
+  const query = useQuery({
     queryKey: ["google-pending"],
-    queryFn: () => request("/api/auth/google/pending") as Promise<{ email: string; fullName: string }>,
+    queryFn: () => request("/api/auth/google/pending") as Promise<PendingGoogleProfile>,
     enabled: active,
     retry: false,
   });
+  return {
+    /** Set once the pending Google profile has loaded. */
+    profile: active ? query.data : undefined,
+    /** The hand-off cookie expired or is missing: fall back to the normal form. */
+    expired: active && query.isError,
+    loading: active && query.isPending,
+  };
+}
+
+/** Finish a Google sign-up with the chosen account type in one click. */
+export function GoogleContinuePanel({ profile, role }: { profile: PendingGoogleProfile; role: SignUpRole }) {
+  const router = useRouter();
+  const setSessionUser = useSetSessionUser();
 
   const complete = useMutation({
     mutationFn: async () => {
@@ -59,35 +75,39 @@ export function GoogleContinue({ role }: { role: SignUpRole }) {
     },
   });
 
-  if (!active) return null;
-  if (pending.isError) {
-    return (
-      <Alert tone="info" title="Your Google sign-in expired">
-        Choose how you&apos;ll use WALE below, then sign up with Google again.
-      </Alert>
-    );
-  }
-  if (!pending.data) return null;
-
   return (
-    <div className="rounded-3xl bg-gradient-to-br from-brand-50 to-white p-4 ring-1 ring-brand-100 sm:p-5">
-      <div className="flex items-center gap-3">
-        <Avatar name={pending.data.fullName} />
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center gap-3 rounded-2xl bg-brand-50/70 p-3 ring-1 ring-brand-100">
+        <Avatar name={profile.fullName} />
         <div className="min-w-0">
-          <p className="text-sm font-bold text-ink-900">Almost there, {pending.data.fullName.split(/\s+/)[0]}!</p>
-          <p className="truncate text-xs text-ink-600">
-            No WALE account uses {pending.data.email} yet. Pick your account type below, then create it.
-          </p>
+          <p className="truncate text-sm font-bold text-ink-900">{profile.fullName}</p>
+          <p className="truncate text-xs text-ink-600">Signing up with Google as {profile.email}</p>
         </div>
       </div>
+
       {complete.isError && (
-        <Alert tone="danger" title="Account not created" className="mt-3">
+        <Alert tone="danger" title="Account not created">
           {complete.error.message}
         </Alert>
       )}
-      <Button block className="mt-4" onClick={() => complete.mutate()} isLoading={complete.isPending} loadingText="Creating account…">
-        Create my {roleLabels[role]} account with Google
+
+      <Button
+        type="button"
+        size="lg"
+        block
+        onClick={() => complete.mutate()}
+        isLoading={complete.isPending}
+        loadingText="Creating account…"
+      >
+        Continue as a {roleLabels[role]}
       </Button>
+
+      <p className="text-center text-xs text-ink-500">
+        Not what you wanted?{" "}
+        <Link href="/signup" className="font-semibold text-brand-700 hover:underline">
+          Sign up with email instead
+        </Link>
+      </p>
     </div>
   );
 }

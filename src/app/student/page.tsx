@@ -1,24 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import {
   Compass,
   UserCircle2,
   Calendar,
-  CheckCircle,
   Clock,
-  AlertTriangle,
   ArrowRight,
-  ShieldCheck,
-  MapPin,
 } from "lucide-react";
 import { usersApi } from "@/lib/api/users";
 import { inspectionsApi, type InspectionRequest } from "@/lib/api/inspections";
-import { useProperties } from "@/hooks/useProperties";
-import { Button, Card, Badge, Alert, toast } from "@/components/ui";
-import { formatRent, formatDate, formatPropertyType } from "@/lib/utils/format";
+import { SuggestedListings } from "@/components/student/SuggestedListings";
+import { useSession } from "@/lib/auth/client-session";
+import { Button, Card, Badge, toast } from "@/components/ui";
+import { formatRent, formatDate } from "@/lib/utils/format";
 
 // Map inspection statuses to visual tone badges
 const statusBadgeTones: Record<InspectionRequest["status"], "warning" | "success" | "danger" | "neutral" | "brand"> = {
@@ -33,7 +30,7 @@ export default function StudentDashboardPage() {
   const queryClient = useQueryClient();
 
   // 1. Fetch Student Profile
-  const { data: profile, isLoading: isProfileLoading } = useQuery({
+  const { data: profile } = useQuery({
     queryKey: ["studentProfile"],
     queryFn: usersApi.getProfile,
   });
@@ -44,12 +41,17 @@ export default function StudentDashboardPage() {
     queryFn: () => inspectionsApi.listRequests("mine"),
   });
 
-  // 3. Fetch Properties near their university
-  const universityId = profile?.university || "unilorin";
-  const { data: nearbyHostels, isLoading: isHostelsLoading } = useProperties({
-    university: universityId,
-    pageSize: 3,
-  });
+  // 3. Suggestions use the profile's preferences, falling back to the account.
+  const { data: user } = useSession();
+  const [now] = useState(() => Date.now());
+  const suggestionPreferences = useMemo(
+    () => ({
+      university: profile?.university || user?.university,
+      maxBudget: profile?.preferredBudget,
+      location: profile?.preferredLocation,
+    }),
+    [profile?.preferredBudget, profile?.preferredLocation, profile?.university, user?.university],
+  );
 
   // 4. Mutation to cancel inspection request
   const cancelMutation = useMutation({
@@ -60,7 +62,7 @@ export default function StudentDashboardPage() {
       });
       queryClient.invalidateQueries({ queryKey: ["inspections"] });
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       toast.error("Cancellation failed", { description: err.message });
     },
   });
@@ -92,37 +94,20 @@ export default function StudentDashboardPage() {
     setCancellingId(id);
   };
 
-  const isLoadingAll = isProfileLoading || isInspectionsLoading || isHostelsLoading;
-
-  if (isLoadingAll) {
-    return (
-      <div className="space-y-8 animate-pulse">
-        <div className="space-y-2">
-          <div className="h-8 w-64 rounded bg-ink-200" />
-          <div className="h-5 w-96 rounded bg-ink-200" />
-        </div>
-
-        <div className="grid gap-6 md:grid-cols-3">
-          <div className="h-32 rounded-card bg-ink-200 md:col-span-2" />
-          <div className="h-32 rounded-card bg-ink-200" />
-        </div>
-
-        <div className="h-64 rounded-card bg-ink-200" />
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-8">
       {/* Welcome Banner */}
       <div className="flex flex-col gap-2">
         <h1 className="text-2xl font-bold tracking-tight text-ink-950 sm:text-3xl">
-          Welcome back, {profile?.name}!
+          Welcome back, {(profile?.name || user?.fullName || "").split(/\s+/)[0]}!
         </h1>
         <p className="text-sm text-ink-500">
-          Manage your verified hostel applications, book inspections, and edit preferences.
+          Here are homes picked for you. Book inspections and track them below.
         </p>
       </div>
+
+      {/* Suggestions come first: they're what students log in for. */}
+      <SuggestedListings preferences={suggestionPreferences} now={now} />
 
       {/* Overview stats: Profile Completion & Quick Actions */}
       <div className="grid gap-6 md:grid-cols-3">
@@ -187,7 +172,9 @@ export default function StudentDashboardPage() {
         </div>
 
         <div className="p-5">
-          {inspections && inspections.length === 0 ? (
+          {isInspectionsLoading ? (
+            <p className="py-6 text-center text-sm text-ink-500">Loading your inspections…</p>
+          ) : inspections && inspections.length === 0 ? (
             <div className="text-center py-10">
               <Calendar className="size-8 text-ink-300 mx-auto" />
               <h4 className="font-semibold text-ink-900 mt-2">No inspections booked</h4>
@@ -247,52 +234,6 @@ export default function StudentDashboardPage() {
           )}
         </div>
       </Card>
-
-      {/* Suggested Properties Grid */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="space-y-1">
-            <h2 className="text-lg font-bold text-ink-950">Approved Hostels Near You</h2>
-            <p className="text-xs text-ink-500">Hostel recommendations matching your campus proximity</p>
-          </div>
-          <Link href="/properties" className="text-xs font-semibold text-brand-700 hover:underline inline-flex items-center gap-1">
-            View all
-            <ArrowRight className="size-3" />
-          </Link>
-        </div>
-
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {nearbyHostels?.properties.map((property) => (
-            <Card key={property.id} className="group relative overflow-hidden flex flex-col justify-between border shadow-sm">
-              <div className="relative aspect-[16/10] w-full overflow-hidden bg-ink-100">
-                <img src={property.images[0]} alt="" className="object-cover size-full group-hover:scale-[1.02] transition-transform duration-300" />
-                <div className="absolute left-2.5 top-2.5 flex gap-1">
-                  {property.verified && <Badge tone="brand" size="sm">✓ Verified</Badge>}
-                </div>
-              </div>
-              <div className="p-4 space-y-2 flex-1 flex flex-col justify-between">
-                <div>
-                  <h4 className="font-semibold text-sm text-ink-900 leading-snug truncate">
-                    <Link href={`/properties/${property.id}`} className="hover:text-brand-700">
-                      {property.title}
-                    </Link>
-                  </h4>
-                  <p className="text-xs text-ink-500 flex items-center gap-1 mt-0.5">
-                    <MapPin className="size-3 text-ink-400" />
-                    <span className="truncate">{property.address}</span>
-                  </p>
-                </div>
-                <div className="pt-2 flex items-center justify-between border-t border-ink-50 mt-auto">
-                  <span className="text-sm font-bold text-brand-900">{formatRent(property.price)}</span>
-                  <span className="text-[10px] text-ink-500 uppercase font-bold bg-ink-100 px-2 py-0.5 rounded">
-                    {formatPropertyType(property.type)}
-                  </span>
-                </div>
-              </div>
-            </Card>
-          ))}
-        </div>
-      </div>
 
       {/* Custom Cancel Request Confirmation Modal */}
       {cancellingId && (
