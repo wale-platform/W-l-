@@ -3,29 +3,20 @@ import { siteConfig } from "@/config/site";
 
 type Tone = "color" | "mono" | "inverse";
 
-const glyphTones: Record<
-  Tone,
-  { dark: string; light: string; window: string; background: string }
-> = {
-  color: {
-    dark: "fill-white",
-    light: "fill-white",
-    window: "fill-brand-800",
-    background: "fill-brand-800",
-  },
-  mono: {
-    dark: "fill-current",
-    light: "fill-current",
-    window: "fill-white",
-    background: "fill-transparent",
-  },
-  inverse: {
-    dark: "fill-white",
-    light: "fill-white",
-    window: "fill-brand-950",
-    background: "fill-transparent",
-  },
+/**
+ * The mark has no background tile: the windows and door are cut out of the
+ * buildings (`evenodd`), so whatever sits behind the logo shows through.
+ */
+const toneClasses: Record<Tone, { mark: string; word: string }> = {
+  color: { mark: "fill-brand-800", word: "text-brand-800" },
+  mono: { mark: "fill-current", word: "text-current" },
+  inverse: { mark: "fill-white", word: "text-white" },
 };
+
+const LEFT_BUILDING = "M6 58V25.5L29 6v52H6Z M14 58V44a5 5 0 0 1 10 0v14H14Z";
+const RIGHT_BUILDING =
+  "M32 58V18h26v40H32Z " +
+  "M38 25h6v6h-6Z M48 25h6v6h-6Z M38 36h6v6h-6Z M48 36h6v6h-6Z";
 
 export function LogoMark({
   className,
@@ -34,26 +25,16 @@ export function LogoMark({
   className?: string;
   tone?: Tone;
 }) {
-  const t = glyphTones[tone];
-
   return (
     <svg
       viewBox="0 0 64 64"
       role="presentation"
       aria-hidden="true"
       focusable="false"
-      className={cn("h-9 w-9 shrink-0", className)}
+      className={cn("h-9 w-9 shrink-0", toneClasses[tone].mark, className)}
     >
-      <rect x="2" y="2" width="60" height="60" rx="10" className={t.background} />
-      <path d="M6 58V25.5L29 6v52H6Z" className={t.dark} />
-      <path d="M32 58V18l26 0v40H32Z" className={t.light} />
-      <g className={t.window}>
-        <rect x="38" y="25" width="6" height="6" rx="1" />
-        <rect x="48" y="25" width="6" height="6" rx="1" />
-        <rect x="38" y="36" width="6" height="6" rx="1" />
-        <rect x="48" y="36" width="6" height="6" rx="1" />
-      </g>
-      <path d="M14 58V44a5 5 0 0 1 10 0v14h-10Z" className={t.window} />
+      <path d={LEFT_BUILDING} fillRule="evenodd" />
+      <path d={RIGHT_BUILDING} fillRule="evenodd" />
     </svg>
   );
 }
@@ -68,11 +49,7 @@ export function Logo({
   tone?: Tone;
   className?: string;
 }) {
-  const wordTone =
-    tone === "color" || tone === "inverse" ? "text-white" : "text-current";
-  const displayTone = tone === "color" ? "inverse" : tone;
-  const lockupTone =
-    tone === "color" ? "rounded-field bg-brand-800 px-2.5 py-1.5" : "";
+  const wordTone = toneClasses[tone].word;
 
   if (variant === "mark") {
     return (
@@ -85,8 +62,8 @@ export function Logo({
 
   if (variant === "stacked") {
     return (
-      <span className={cn("inline-flex flex-col items-center gap-3", lockupTone, className)}>
-        <LogoMark tone={displayTone} className="h-16 w-16" />
+      <span className={cn("inline-flex flex-col items-center gap-3", className)}>
+        <LogoMark tone={tone} className="h-16 w-16" />
         <span className="flex flex-col items-center">
           <span className={cn("text-2xl font-semibold uppercase leading-none tracking-[0.28em]", wordTone)}>
             {siteConfig.shortName}
@@ -97,8 +74,8 @@ export function Logo({
   }
 
   return (
-    <span className={cn("inline-flex items-center gap-2", lockupTone, className)}>
-      <LogoMark tone={displayTone} className="h-10 w-10" />
+    <span className={cn("inline-flex items-center gap-2", className)}>
+      <LogoMark tone={tone} className="h-10 w-10" />
       <span className="leading-none">
         <span
           className={cn(

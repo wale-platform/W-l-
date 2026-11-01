@@ -10,7 +10,7 @@ import { apiErrorSchema } from "./schemas";
  * inlinable by the bundler — it is not sent to the server at all.
  */
 export const apiClient = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api",
+  baseURL: process.env.NEXT_PUBLIC_API_BASE_URL || "/api",
   timeout: 15_000,
   headers: {
     "Content-Type": "application/json",

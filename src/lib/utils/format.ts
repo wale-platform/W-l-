@@ -1,5 +1,5 @@
 import { universities } from "@/config/site";
-import type { Property } from "@/lib/api/schemas";
+import { PROPERTY_TYPES, type Property } from "@/lib/api/schemas";
 
 /** Naira, no decimals — matches how Nigerian rents are quoted. */
 export function formatNaira(amount: number): string {
@@ -23,15 +23,8 @@ export function formatDate(iso: string): string {
   }).format(new Date(iso));
 }
 
-const typeLabels: Record<Property["type"], string> = {
-  studio: "Self-contained",
-  one_bedroom: "1 bedroom",
-  two_bedroom: "2 bedroom",
-  shared: "Shared / single room",
-};
-
 export function formatPropertyType(type: Property["type"]): string {
-  return typeLabels[type];
+  return PROPERTY_TYPES.find((option) => option.value === type)?.label ?? type;
 }
 
 const sourceLabels: Record<Property["source"], string> = {
@@ -48,4 +41,15 @@ export function formatSource(source: Property["source"]): string {
 
 export function universityName(id?: string): string | undefined {
   return universities.find((u) => u.id === id)?.short;
+}
+
+/**
+ * Today's date as `YYYY-MM-DD` in the user's own time zone — the format a
+ * `<input type="date">` expects. (`toISOString()` would use UTC, which is
+ * already tomorrow late at night in Lagos.)
+ */
+export function todayDateInputValue(date = new Date()): string {
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${date.getFullYear()}-${month}-${day}`;
 }

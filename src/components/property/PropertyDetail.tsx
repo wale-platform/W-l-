@@ -90,7 +90,7 @@ export function PropertyDetail({ id }: { id: string }) {
       queryClient.invalidateQueries({ queryKey: ["inspections"] });
       toast.success("Inspection requested successfully!");
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       toast.error("Booking failed", { description: err.message });
     },
   });

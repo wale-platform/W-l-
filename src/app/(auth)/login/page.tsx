@@ -2,15 +2,15 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback } from "react";
+import { Suspense } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "@tanstack/react-query";
 import { loginSchema, type LoginData } from "@/lib/api/schemas";
 import { authApi } from "@/lib/api/auth";
-import { startGoogleSession } from "@/lib/auth/client-session";
+import { postLoginPath, useSetSessionUser } from "@/lib/auth/client-session";
+import { GoogleAuthError } from "@/components/auth/GoogleAuthError";
 import { GoogleSignInButton } from "@/components/auth/GoogleSignInButton";
-import type { AuthUser } from "@/lib/api/auth";
 import {
   Button,
   FormField,
@@ -23,20 +23,7 @@ import {
 
 export default function LoginPage() {
   const router = useRouter();
-  const handleGoogleAuth = useCallback(
-    (user: AuthUser) => {
-      try {
-        const destination = startGoogleSession(user);
-        toast.success("Signed in with Google", { description: `Welcome, ${user.fullName}.` });
-        router.push(destination);
-      } catch (error) {
-        toast.error("Sign-in failed", {
-          description: error instanceof Error ? error.message : "Your account could not be saved.",
-        });
-      }
-    },
-    [router],
-  );
+  const setSessionUser = useSetSessionUser();
 
   const {
     register,
@@ -45,24 +32,15 @@ export default function LoginPage() {
   } = useForm<LoginData>({
     resolver: zodResolver(loginSchema),
     mode: "onBlur",
+    defaultValues: { remember: true },
   });
 
   const mutation = useMutation({
     mutationFn: authApi.login,
     onSuccess: (data) => {
-      if (typeof window !== "undefined") {
-        localStorage.setItem("wale_is_logged_in", "true");
-        localStorage.setItem("wale_role", data.user.role);
-        localStorage.setItem("wale_user", JSON.stringify(data.user));
-      }
+      setSessionUser(data.user);
       toast.success("Welcome back!", { description: data.message });
-      
-      const role = data.user.role;
-      if (role === "admin") router.push("/admin");
-      else if (role === "landlord") router.push("/landlord");
-      else if (role === "lawyer") router.push("/lawyer");
-      else if (role === "tenant") router.push("/tenant");
-      else router.push("/student");
+      router.push(postLoginPath(data.user));
     },
     onError: (error: Error) => {
       toast.error("Login failed", { description: error.message });
@@ -80,6 +58,10 @@ export default function LoginPage() {
         </p>
       </div>
 
+      <Suspense fallback={null}>
+        <GoogleAuthError />
+      </Suspense>
+
       {mutation.isError && (
         <Alert tone="danger" title="Login Failed">
           {mutation.error.message}
@@ -88,16 +70,12 @@ export default function LoginPage() {
 
       {mutation.isSuccess && (
         <Alert tone="success" title="Success">
-          Welcome back! Redirecting you to the properties...
+          Welcome back! Redirecting you to your dashboard...
         </Alert>
       )}
 
       <div className="flex flex-col gap-3">
-        <GoogleSignInButton
-          onAuthenticated={handleGoogleAuth}
-          buttonText="signin_with"
-          disabled={mutation.isPending}
-        />
+        <GoogleSignInButton mode="signin" disabled={mutation.isPending} />
         <div className="relative py-1">
           <div className="absolute inset-0 flex items-center" aria-hidden="true">
             <span className="w-full border-t border-ink-200" />
@@ -138,7 +116,7 @@ export default function LoginPage() {
 
         <div className="flex items-center justify-between">
           <label className="flex items-center gap-2 cursor-pointer select-none">
-            <Checkbox id="remember" name="remember" />
+            <Checkbox {...register("remember")} />
             <span className="text-sm font-medium text-ink-700">Remember me</span>
           </label>
 

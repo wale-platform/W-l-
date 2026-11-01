@@ -1,19 +1,29 @@
 "use client";
 
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "@tanstack/react-query";
 import { Send } from "lucide-react";
 import { contactApi } from "@/lib/api";
-import { contactFormSchema, type ContactFormData } from "@/lib/api/schemas";
+import {
+  CONTACT_TOPICS,
+  contactFormSchema,
+  type ContactFormData,
+  type ContactFormValues,
+} from "@/lib/api/schemas";
+import { useSession } from "@/lib/auth/client-session";
 import {
   Button,
   FormField,
   Input,
+  Select,
   Textarea,
   Alert,
   toast,
 } from "@/components/ui";
+
+type ContactTopic = ContactFormData["topic"];
 
 /**
  * Contact form.
@@ -22,22 +32,31 @@ import {
  * handler — client-side for instant feedback, server-side because the
  * client can always be bypassed.
  */
-export function ContactForm() {
+export function ContactForm({ initialTopic = "general" }: { initialTopic?: ContactTopic }) {
+  // Signed-in users don't have to retype their name and email.
+  const { data: user } = useSession();
+  const [honeypot, setHoneypot] = useState("");
+
   const {
     register,
     handleSubmit,
     reset,
     formState: { errors },
-  } = useForm<ContactFormData>({
+  } = useForm<ContactFormValues, unknown, ContactFormData>({
     resolver: zodResolver(contactFormSchema),
     mode: "onBlur",
+    defaultValues: { topic: initialTopic },
+    values: user
+      ? { topic: initialTopic, name: user.fullName, email: user.email, phone: user.phone ?? "", subject: "", message: "" }
+      : undefined,
+    resetOptions: { keepDirtyValues: true },
   });
 
   const mutation = useMutation({
-    mutationFn: contactApi.submit,
-    onSuccess: (data) => {
+    mutationFn: (values: ContactFormData) => contactApi.submit({ ...values, website: honeypot }),
+    onSuccess: (data, values) => {
       toast.success("Message sent", { description: data.message });
-      reset();
+      reset({ topic: values.topic, name: values.name, email: values.email, phone: values.phone ?? "", subject: "", message: "" });
     },
     onError: (error: Error) => {
       toast.error("Couldn't send message", { description: error.message });
@@ -48,7 +67,7 @@ export function ContactForm() {
     <form
       onSubmit={handleSubmit((values) => mutation.mutate(values))}
       noValidate
-      className="flex flex-col gap-5"
+      className="relative flex flex-col gap-5"
     >
       {/* Server-side failures surface here as well as in the toast — a
           toast alone disappears before a slow reader gets to it. */}
@@ -63,6 +82,33 @@ export function ContactForm() {
           Thanks for reaching out — we reply within one working day.
         </Alert>
       )}
+
+      {/* Honeypot: hidden from people and assistive tech; bots fill it in. */}
+      <div aria-hidden="true" className="absolute -left-[9999px] h-px w-px overflow-hidden">
+        <label>
+          Website
+          <input
+            type="text"
+            name="website"
+            tabIndex={-1}
+            autoComplete="off"
+            value={honeypot}
+            onChange={(event) => setHoneypot(event.target.value)}
+          />
+        </label>
+      </div>
+
+      <FormField label="What can we help with?" required error={errors.topic?.message}>
+        {(field) => (
+          <Select {...field} {...register("topic")}>
+            {CONTACT_TOPICS.map((topic) => (
+              <option key={topic.value} value={topic.value}>
+                {topic.label}
+              </option>
+            ))}
+          </Select>
+        )}
+      </FormField>
 
       <div className="grid gap-5 sm:grid-cols-2">
         <FormField label="Full name" required error={errors.name?.message}>
@@ -110,7 +156,7 @@ export function ContactForm() {
           <Input
             {...field}
             {...register("subject")}
-            placeholder="Question about a listing near UNILAG"
+            placeholder="Question about a self-contain in Tanke"
           />
         )}
       </FormField>

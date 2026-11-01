@@ -17,13 +17,10 @@ import {
 import { useProperties } from "@/hooks/useProperties";
 import { universities } from "@/config/site";
 import { formatNaira } from "@/lib/utils/format";
-import type { SearchParams as SearchParamsType } from "@/lib/api/schemas";
+import { PROPERTY_TYPES, type SearchParams as SearchParamsType } from "@/lib/api/schemas";
 
 const propertyTypes = [
-  { value: "studio", label: "Self-contained" },
-  { value: "one_bedroom", label: "1 bedroom" },
-  { value: "two_bedroom", label: "2 bedroom" },
-  { value: "shared", label: "Shared / single room" },
+  ...PROPERTY_TYPES,
 ] as const;
 
 const priceRanges = [

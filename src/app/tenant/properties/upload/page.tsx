@@ -15,15 +15,19 @@ import {
   CardTitle,
   toast,
 } from "@/components/ui";
+import { PropertyImagePicker, type PickedImage } from "@/components/property/PropertyImagePicker";
 import { propertyApi } from "@/lib/api/property";
+import { PROPERTY_TYPES, type PropertyType } from "@/lib/api/schemas";
+import { formatPropertyType, todayDateInputValue } from "@/lib/utils/format";
 
 export default function UploadApartmentPage() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
+  const [images, setImages] = useState<PickedImage[]>([]);
   const [address, setAddress] = useState("");
   const [price, setPrice] = useState("");
-  const [apartmentType, setApartmentType] = useState("");
-  const [moveOutDate, setMoveOutDate] = useState("");
+  const [apartmentType, setApartmentType] = useState<PropertyType | "">("");
+  const [moveOutDate, setMoveOutDate] = useState(todayDateInputValue);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -33,14 +37,19 @@ export default function UploadApartmentPage() {
       return;
     }
 
+    if (images.length === 0) {
+      toast.error("Add a photo", { description: "Add at least one photo of the property." });
+      return;
+    }
+
     try {
       setIsLoading(true);
 
       await propertyApi.create({
-        title: `Outgoing tenant listing: ${apartmentType} at ${address}`,
+        title: `Outgoing tenant listing: ${formatPropertyType(apartmentType)} at ${address}`,
         description: `This apartment is becoming vacant soon. The outgoing tenant is moving out on ${moveOutDate}. Ideal for students looking for verified handover.`,
         price: Number(price),
-        type: "one_bedroom",
+        type: apartmentType,
         bedrooms: 1,
         bathrooms: 1,
         address,
@@ -48,25 +57,16 @@ export default function UploadApartmentPage() {
         state: "Kwara",
         university: "unilorin",
         availableDate: moveOutDate,
-        images: [
-          "/listings/listing-05.jpg",
-          "/listings/listing-06.jpg",
-        ],
         amenities: ["Prepaid meter", "Water supply"],
-        source: "tenant",
-        landlord: {
-          name: "Chioma Nwachukwu (Outgoing Tenant)",
-          phone: "+2348123456789",
-        },
-      });
+      }, images.map((image) => image.file));
 
       toast.success("Listing submitted", {
         description: "Your outgoing apartment details have been submitted and are pending verification.",
       });
       router.push("/tenant");
-    } catch (err: any) {
+    } catch (err) {
       toast.error("Submission failed", {
-        description: err.message || "An error occurred while uploading the apartment.",
+        description: err instanceof Error ? err.message : "An error occurred while uploading the apartment.",
       });
     } finally {
       setIsLoading(false);
@@ -140,15 +140,21 @@ export default function UploadApartmentPage() {
                     Apartment Type
                   </label>
 
-                  <input
+                  <select
                     id="apartmentType"
                     value={apartmentType}
                     onChange={(event) =>
-                      setApartmentType(event.target.value)
+                      setApartmentType(event.target.value as PropertyType | "")
                     }
-                    className="h-11 rounded-field border border-ink-200 px-4 text-sm outline-none focus:border-brand-600"
-                    placeholder="e.g. 2 Bedroom Flat, Self-Contain"
-                  />
+                    className="h-11 rounded-field border border-ink-200 bg-white px-4 text-sm outline-none focus:border-brand-600"
+                  >
+                    <option value="" disabled>Select type</option>
+                    {PROPERTY_TYPES.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div className="flex flex-col gap-2">
@@ -168,6 +174,11 @@ export default function UploadApartmentPage() {
                     }
                     className="h-11 rounded-field border border-ink-200 px-4 text-sm outline-none focus:border-brand-600"
                   />
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <p className="text-sm font-medium text-ink-800">Photos</p>
+                  <PropertyImagePicker images={images} onChange={setImages} disabled={isLoading} />
                 </div>
 
                 <div className="flex justify-end gap-3 pt-2">

@@ -2,16 +2,16 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useRef, type KeyboardEvent } from "react";
+import { Suspense, useRef, type KeyboardEvent } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "@tanstack/react-query";
 import { signUpFormSchema, type SignUpFormData } from "@/lib/api/schemas";
 import { authApi } from "@/lib/api/auth";
-import { startGoogleSession } from "@/lib/auth/client-session";
+import { dashboardPath, useSetSessionUser } from "@/lib/auth/client-session";
+import { GoogleAuthError } from "@/components/auth/GoogleAuthError";
 import { GoogleSignInButton } from "@/components/auth/GoogleSignInButton";
-import type { AuthUser } from "@/lib/api/auth";
 import {
   Button,
   FormField,
@@ -33,20 +33,7 @@ const accountRoles: { value: AccountRole; label: string; description: string }[]
 export default function SignUpPage() {
   const router = useRouter();
   const roleOptionRefs = useRef<Array<HTMLButtonElement | null>>([]);
-  const handleGoogleAuth = useCallback(
-    (user: AuthUser) => {
-      try {
-        const destination = startGoogleSession(user);
-        toast.success("Account ready", { description: `Welcome to WALE, ${user.fullName}.` });
-        router.push(destination);
-      } catch (error) {
-        toast.error("Sign-up failed", {
-          description: error instanceof Error ? error.message : "Your account could not be saved.",
-        });
-      }
-    },
-    [router],
-  );
+  const setSessionUser = useSetSessionUser();
 
   const {
     control,
@@ -96,9 +83,10 @@ export default function SignUpPage() {
 
   const mutation = useMutation({
     mutationFn: authApi.signUp,
-    onSuccess: () => {
-      toast.success("Account created successfully!", { description: "Please log in with your email and password." });
-      router.push("/login");
+    onSuccess: (data) => {
+      setSessionUser(data.user);
+      toast.success("Account created successfully!", { description: `Welcome to WALE, ${data.user.fullName}.` });
+      router.push(dashboardPath(data.user.role));
     },
     onError: (error: Error) => {
       toast.error("Registration failed", { description: error.message });
@@ -118,6 +106,10 @@ export default function SignUpPage() {
           Choose how you&apos;ll use WALE, then set up your account.
         </p>
       </div>
+
+      <Suspense fallback={null}>
+        <GoogleAuthError />
+      </Suspense>
 
       {mutation.isError && (
         <Alert tone="danger" title="Sign Up Failed">
@@ -210,12 +202,7 @@ export default function SignUpPage() {
         </fieldset>
 
         <div className="flex flex-col gap-3">
-          <GoogleSignInButton
-            onAuthenticated={handleGoogleAuth}
-            buttonText="signup_with"
-            accountRole={selectedRole}
-            disabled={mutation.isPending}
-          />
+          <GoogleSignInButton mode="signup" accountRole={selectedRole} disabled={mutation.isPending} />
           <div className="relative py-1">
             <div className="absolute inset-0 flex items-center" aria-hidden="true">
               <span className="w-full border-t border-ink-200" />

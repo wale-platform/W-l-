@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
   try {
     response = await fetch(url, {
       headers: {
-        "User-Agent": "WALE Housing (hello@walehousing.ng)",
+        "User-Agent": "WALE Housing (build.waleplartform@gmail.com)",
         "Accept-Language": "en",
       },
       next: { revalidate: 86_400 },

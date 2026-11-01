@@ -4,38 +4,55 @@ import {
   propertyListResponseSchema,
   searchParamsSchema,
   type Property,
+  type PropertyInput,
   type PropertyListResponse,
   type SearchParams,
 } from "./schemas";
-const CUSTOM_PROPS_KEY = "wale_custom_properties";
-const VERIFICATION_OVERRIDES_KEY = "wale_verification_overrides";
-const DELETED_PROPS_KEY = "wale_deleted_properties";
 
-// Helper to filter custom properties on the client side
-function matchesSearchParams(property: Property, params: Partial<SearchParams>): boolean {
-  const query = params.query?.toLowerCase().trim();
-  if (query) {
-    const haystack = [
-      property.title,
-      property.description,
-      property.address,
-      property.city,
-      property.state,
-    ]
-      .join(" ")
-      .toLowerCase();
-    if (!haystack.includes(query)) return false;
+/**
+ * Listings submitted through the app are stored server-side (ids start with
+ * `lst_`). The bundled sample listings are static, so admin moderation of
+ * those is still simulated in localStorage to keep the demo usable.
+ */
+const SAMPLE_VERIFICATION_OVERRIDES_KEY = "wale_verification_overrides";
+const SAMPLE_DELETED_KEY = "wale_deleted_properties";
+
+function isSubmittedListing(id: string): boolean {
+  return id.startsWith("lst_");
+}
+
+function readJson<T>(key: string, fallback: T): T {
+  if (typeof window === "undefined") return fallback;
+  try {
+    const stored = localStorage.getItem(key);
+    return stored ? (JSON.parse(stored) as T) : fallback;
+  } catch {
+    return fallback;
   }
+}
 
-  if (params.university && property.university !== params.university) return false;
-  if (params.type && property.type !== params.type) return false;
-  if (params.minPrice && property.price < params.minPrice) return false;
-  if (params.maxPrice && property.price > params.maxPrice) return false;
-  if (params.source && property.source !== params.source) return false;
+function applySampleOverrides(property: Property): Property {
+  const overrides = readJson<Record<string, boolean>>(SAMPLE_VERIFICATION_OVERRIDES_KEY, {});
+  return overrides[property.id] === undefined
+    ? property
+    : { ...property, verified: overrides[property.id] };
+}
 
-  if (params.verifiedOnly && !property.verified) return false;
-
-  return true;
+/** Turns an error response into an `Error` carrying the server's message. */
+async function requestJson(input: string, init: RequestInit, fallback: string): Promise<unknown> {
+  const response = await fetch(`${apiClient.defaults.baseURL}${input}`, {
+    credentials: "include",
+    ...init,
+  });
+  const result: unknown = await response.json().catch(() => null);
+  if (!response.ok) {
+    const message =
+      typeof result === "object" && result !== null && "message" in result && typeof result.message === "string"
+        ? result.message
+        : fallback;
+    throw new Error(message);
+  }
+  return result;
 }
 
 export const propertyApi = {
@@ -44,219 +61,88 @@ export const propertyApi = {
    */
   async list(params?: Partial<SearchParams>): Promise<PropertyListResponse> {
     const validated = searchParamsSchema.parse(params ?? {});
-    
-    // Fetch default ones from API
-    const { data } = await apiClient.get("/properties", { params: { ...validated, page: 1, pageSize: 100 } });
-    const apiProps = (data.properties || []) as Property[];
+    const { data } = await apiClient.get("/properties", { params: validated });
+    const response = propertyListResponseSchema.parse(data);
 
-    // Retrieve custom properties, overrides, and deleted list from localStorage
-    let customProps: Property[] = [];
-    let overrides: Record<string, boolean> = {};
-    let deletedIds: string[] = [];
-
-    if (typeof window !== "undefined") {
-      const storedProps = localStorage.getItem(CUSTOM_PROPS_KEY);
-      if (storedProps) {
-        try {
-          customProps = JSON.parse(storedProps);
-        } catch (e) {}
-      }
-
-      const storedOverrides = localStorage.getItem(VERIFICATION_OVERRIDES_KEY);
-      if (storedOverrides) {
-        try {
-          overrides = JSON.parse(storedOverrides);
-        } catch (e) {}
-      }
-
-      const storedDeleted = localStorage.getItem(DELETED_PROPS_KEY);
-      if (storedDeleted) {
-        try {
-          deletedIds = JSON.parse(storedDeleted);
-        } catch (e) {}
-      }
-    }
-
-    // Apply verification overrides to both API and custom properties
-    const applyOverrides = (p: Property) => {
-      if (overrides[p.id] !== undefined) {
-        return { ...p, verified: overrides[p.id] };
-      }
-      return p;
-    };
-
-    const combined = [
-      ...customProps.map(applyOverrides),
-      ...apiProps.map(applyOverrides)
-    ];
-
-    // Filter combined list
-    const filtered = combined
-      .filter((p) => !deletedIds.includes(p.id))
-      .filter((p) => matchesSearchParams(p, validated));
-
-    // Sort
-    const sortBy = validated.sortBy || "newest";
-    if (sortBy === "price_asc") {
-      filtered.sort((a, b) => a.price - b.price);
-    } else if (sortBy === "price_desc") {
-      filtered.sort((a, b) => b.price - a.price);
-    } else {
-      filtered.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    }
-
-    const total = filtered.length;
-    const page = validated.page ?? 1;
-    const pageSize = validated.pageSize ?? 12;
-    const totalPages = Math.max(1, Math.ceil(total / pageSize));
-    const start = (page - 1) * pageSize;
-
+    const deletedIds = readJson<string[]>(SAMPLE_DELETED_KEY, []);
+    const visible = response.properties.filter((p) => !deletedIds.includes(p.id));
     return {
-      properties: filtered.slice(start, start + pageSize),
-      total,
-      page,
-      pageSize,
-      totalPages,
+      ...response,
+      total: response.total - (response.properties.length - visible.length),
+      properties: visible.map(applySampleOverrides),
     };
+  },
+
+  /**
+   * Listings submitted by the signed-in landlord / lawyer / tenant.
+   */
+  async listMine(): Promise<PropertyListResponse> {
+    const data = await requestJson("/properties/mine", { cache: "no-store" }, "Your listings could not be loaded.");
+    return propertyListResponseSchema.parse(data);
   },
 
   /**
    * Fetch a single property by ID.
    */
   async getById(id: string): Promise<Property> {
-    // Check localStorage first
-    if (typeof window !== "undefined") {
-      const storedProps = localStorage.getItem(CUSTOM_PROPS_KEY);
-      if (storedProps) {
-        try {
-          const customProps: Property[] = JSON.parse(storedProps);
-          const found = customProps.find((p) => p.id === id);
-          if (found) {
-            // Apply override if exists
-            const storedOverrides = localStorage.getItem(VERIFICATION_OVERRIDES_KEY);
-            if (storedOverrides) {
-              const overrides = JSON.parse(storedOverrides);
-              if (overrides[id] !== undefined) {
-                found.verified = overrides[id];
-              }
-            }
-            return found;
-          }
-        } catch (e) {}
-      }
-    }
-
     const { data } = await apiClient.get(`/properties/${id}`);
-    const property = propertySchema.parse(data);
-
-    // Apply verification override if exists
-    if (typeof window !== "undefined") {
-      const storedOverrides = localStorage.getItem(VERIFICATION_OVERRIDES_KEY);
-      if (storedOverrides) {
-        try {
-          const overrides = JSON.parse(storedOverrides);
-          if (overrides[id] !== undefined) {
-            property.verified = overrides[id];
-          }
-        } catch (e) {}
-      }
-    }
-
-    return property;
+    return applySampleOverrides(propertySchema.parse(data));
   },
 
   /**
-   * Create a new property listing.
+   * Submit a new listing with its photos. The server attaches the owner and
+   * listing source from the session; new listings start unverified.
    */
-  async create(payload: Omit<Property, "id" | "verified" | "createdAt" | "updatedAt">): Promise<Property> {
-    await new Promise((resolve) => setTimeout(resolve, 1000)); // Simulate network latency
+  async create(input: PropertyInput, images: File[]): Promise<Property> {
+    const body = new FormData();
+    body.append("data", JSON.stringify(input));
+    for (const image of images) body.append("images", image, image.name);
 
-    const newProperty: Property = {
-      ...payload,
-      id: `custom-${Math.random().toString(36).substr(2, 9)}`,
-      verified: false,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-
-    if (typeof window !== "undefined") {
-      const storedProps = localStorage.getItem(CUSTOM_PROPS_KEY);
-      let list: Property[] = [];
-      if (storedProps) {
-        try {
-          list = JSON.parse(storedProps);
-        } catch (e) {}
-      }
-      list.unshift(newProperty);
-      localStorage.setItem(CUSTOM_PROPS_KEY, JSON.stringify(list));
-    }
-
-    return newProperty;
+    const data = await requestJson(
+      "/properties",
+      { method: "POST", body },
+      "Your listing could not be submitted. Please try again.",
+    );
+    return propertySchema.parse(data);
   },
 
   /**
    * Update verification status of a property (Admin action).
    */
   async updateVerification(id: string, verified: boolean): Promise<{ success: boolean; propertyId: string }> {
-    await new Promise((resolve) => setTimeout(resolve, 800));
-
-    if (typeof window !== "undefined") {
-      // Save verification override
-      const storedOverrides = localStorage.getItem(VERIFICATION_OVERRIDES_KEY);
-      let overrides: Record<string, boolean> = {};
-      if (storedOverrides) {
-        try {
-          overrides = JSON.parse(storedOverrides);
-        } catch (e) {}
-      }
-      overrides[id] = verified;
-      localStorage.setItem(VERIFICATION_OVERRIDES_KEY, JSON.stringify(overrides));
-
-      // Also update inside custom properties if it's there
-      const storedProps = localStorage.getItem(CUSTOM_PROPS_KEY);
-      if (storedProps) {
-        try {
-          const list: Property[] = JSON.parse(storedProps);
-          const updatedList = list.map((p) => (p.id === id ? { ...p, verified } : p));
-          localStorage.setItem(CUSTOM_PROPS_KEY, JSON.stringify(updatedList));
-        } catch (e) {}
-      }
+    if (isSubmittedListing(id)) {
+      await requestJson(
+        `/properties/${id}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ verified }),
+        },
+        "Verification could not be updated.",
+      );
+      return { success: true, propertyId: id };
     }
 
+    const overrides = readJson<Record<string, boolean>>(SAMPLE_VERIFICATION_OVERRIDES_KEY, {});
+    overrides[id] = verified;
+    localStorage.setItem(SAMPLE_VERIFICATION_OVERRIDES_KEY, JSON.stringify(overrides));
     return { success: true, propertyId: id };
   },
 
   /**
-   * Delete a property listing (Landlord / Lawyer / Tenant / Admin action).
+   * Delete a property listing (owner or admin).
    */
   async delete(id: string): Promise<{ success: boolean; propertyId: string }> {
-    await new Promise((resolve) => setTimeout(resolve, 800));
-
-    if (typeof window !== "undefined") {
-      // 1. Remove from custom properties if exists
-      const storedProps = localStorage.getItem(CUSTOM_PROPS_KEY);
-      if (storedProps) {
-        try {
-          const list: Property[] = JSON.parse(storedProps);
-          const filteredList = list.filter((p) => p.id !== id);
-          localStorage.setItem(CUSTOM_PROPS_KEY, JSON.stringify(filteredList));
-        } catch (e) {}
-      }
-
-      // 2. Add to deleted overrides list (in case it is an API seeded property)
-      const storedDeleted = localStorage.getItem(DELETED_PROPS_KEY);
-      let deletedIds: string[] = [];
-      if (storedDeleted) {
-        try {
-          deletedIds = JSON.parse(storedDeleted);
-        } catch (e) {}
-      }
-      if (!deletedIds.includes(id)) {
-        deletedIds.push(id);
-        localStorage.setItem(DELETED_PROPS_KEY, JSON.stringify(deletedIds));
-      }
+    if (isSubmittedListing(id)) {
+      await requestJson(`/properties/${id}`, { method: "DELETE" }, "The listing could not be deleted.");
+      return { success: true, propertyId: id };
     }
 
+    const deletedIds = readJson<string[]>(SAMPLE_DELETED_KEY, []);
+    if (!deletedIds.includes(id)) {
+      deletedIds.push(id);
+      localStorage.setItem(SAMPLE_DELETED_KEY, JSON.stringify(deletedIds));
+    }
     return { success: true, propertyId: id };
   },
 
@@ -264,8 +150,8 @@ export const propertyApi = {
    * Mark interest in a property — triggers an inspection request.
    */
   async requestInspection(propertyId: string): Promise<{ message: string }> {
-    // If it's a custom property, we can mock it
-    if (propertyId.startsWith("custom-")) {
+    // Inspection requests for submitted listings aren't stored server-side yet.
+    if (isSubmittedListing(propertyId)) {
       await new Promise((resolve) => setTimeout(resolve, 800));
       return { message: "Your inspection request has been submitted to the landlord." };
     }

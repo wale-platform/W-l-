@@ -9,6 +9,7 @@ import { Button } from "@/components/ui";
 import { Container } from "./Container";
 import { mainNav } from "@/config/site";
 import { cn } from "@/lib/utils/cn";
+import { dashboardPath, useLogout, useSession } from "@/lib/auth/client-session";
 
 export function Navbar() {
   const pathname = usePathname();
@@ -28,33 +29,11 @@ export function Navbar() {
     };
   }, [open]);
 
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [userRole, setUserRole] = useState("student");
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      setIsLoggedIn(localStorage.getItem("wale_is_logged_in") === "true");
-      setUserRole(localStorage.getItem("wale_role") || "student");
-    }
-  }, [pathname]);
-
-  const handleLogout = () => {
-    if (typeof window !== "undefined") {
-      localStorage.removeItem("wale_is_logged_in");
-      localStorage.removeItem("wale_role");
-      localStorage.removeItem("wale_user");
-      setIsLoggedIn(false);
-      setUserRole("student");
-    }
-  };
-
-  const getDashboardHref = () => {
-    if (userRole === "admin") return "/admin";
-    if (userRole === "landlord") return "/landlord";
-    if (userRole === "lawyer") return "/lawyer";
-    if (userRole === "tenant") return "/tenant";
-    return "/student";
-  };
+  const { data: user, isPending: sessionPending } = useSession();
+  const logout = useLogout();
+  const isLoggedIn = Boolean(user);
+  const handleLogout = () => logout.mutate();
+  const getDashboardHref = () => (user ? dashboardPath(user.role) : "/login");
 
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
@@ -75,7 +54,7 @@ export function Navbar() {
                     href={item.href}
                     aria-current={isActive(item.href) ? "page" : undefined}
                     className={cn(
-                      "rounded-field px-3 py-2 text-sm font-medium transition-colors",
+                      "rounded-full px-4 py-2 text-sm font-medium transition-colors",
                       isActive(item.href)
                          ? "bg-brand-50 text-brand-800"
                         : "text-ink-600 hover:bg-ink-50 hover:text-ink-900",
@@ -88,7 +67,9 @@ export function Navbar() {
             </ul>
           </nav>
 
-          <div className="hidden items-center gap-2 lg:flex">
+          {/* Kept invisible (not removed) while the session loads, so a
+              signed-in user doesn't see "Log in" flash and the layout holds. */}
+          <div className={cn("hidden items-center gap-2 lg:flex", sessionPending && "invisible")}>
             {isLoggedIn ? (
               <>
                 <Link href={getDashboardHref()}>
@@ -101,9 +82,16 @@ export function Navbar() {
                 </Button>
               </>
             ) : (
-              <Link href="/#waitlist">
-                <Button size="sm">Get early access</Button>
-              </Link>
+              <>
+                <Link href="/login">
+                  <Button tone="ghost" size="sm">
+                    Log in
+                  </Button>
+                </Link>
+                <Link href="/signup">
+                  <Button size="sm">Sign up</Button>
+                </Link>
+              </>
             )}
           </div>
 
@@ -113,7 +101,7 @@ export function Navbar() {
             aria-expanded={open}
             aria-controls="mobile-nav"
             aria-label={open ? "Close menu" : "Open menu"}
-            className="rounded-field p-2 text-ink-700 transition-colors hover:bg-ink-100 lg:hidden"
+            className="rounded-full p-2 text-ink-700 transition-colors hover:bg-ink-100 lg:hidden"
           >
             {open ? (
               <X aria-hidden="true" className="size-5" />
@@ -138,7 +126,7 @@ export function Navbar() {
                       href={item.href}
                       aria-current={isActive(item.href) ? "page" : undefined}
                       className={cn(
-                        "block rounded-field px-3 py-2.5 text-sm font-medium transition-colors",
+                        "block rounded-full px-4 py-2.5 text-sm font-medium transition-colors",
                         isActive(item.href)
                           ? "bg-brand-50 text-brand-800"
                           : "text-ink-700 hover:bg-ink-50",
@@ -150,7 +138,7 @@ export function Navbar() {
                 ))}
               </ul>
 
-              <div className="mt-4 flex flex-col gap-2 border-t border-ink-100 pt-4">
+              <div className={cn("mt-4 flex flex-col gap-2 border-t border-ink-100 pt-4", sessionPending && "invisible")}>
                 {isLoggedIn ? (
                   <>
                     <Link href={getDashboardHref()} className="w-full">
@@ -161,9 +149,16 @@ export function Navbar() {
                     </Button>
                   </>
                 ) : (
-                  <Link href="/#waitlist" className="w-full">
-                    <Button block>Get early access</Button>
-                  </Link>
+                  <>
+                    <Link href="/signup" className="w-full">
+                      <Button block>Sign up</Button>
+                    </Link>
+                    <Link href="/login" className="w-full">
+                      <Button tone="outline" block>
+                        Log in
+                      </Button>
+                    </Link>
+                  </>
                 )}
               </div>
             </nav>

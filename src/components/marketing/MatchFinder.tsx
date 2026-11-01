@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { Sparkles } from "lucide-react";
 import { PropertyCard } from "@/components/property/PropertyCard";
-import { propertyListResponseSchema, type Property } from "@/lib/api/schemas";
+import { PROPERTY_TYPES, propertyListResponseSchema, type Property } from "@/lib/api/schemas";
 import {
   getMatchScore,
   matchesRequirements,
@@ -18,10 +19,7 @@ type RankedProperty = {
 function isPropertyType(value: string): value is MatchPreferences["propertyType"] {
   return (
     value === "any" ||
-    value === "studio" ||
-    value === "shared" ||
-    value === "one_bedroom" ||
-    value === "two_bedroom"
+    PROPERTY_TYPES.some((option) => option.value === value)
   );
 }
 
@@ -106,12 +104,21 @@ export function MatchFinder() {
       <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] lg:items-start">
         <form
           onSubmit={handleSubmit}
-          className="sticky top-16 z-20 max-h-[calc(100svh-4.5rem)] self-start space-y-4 overflow-y-auto rounded-2xl border border-ink-200 bg-white p-4 shadow-sm sm:p-5 lg:top-20 lg:max-h-[calc(100svh-6rem)]"
+          className="sticky top-16 z-20 max-h-[calc(100svh-4.5rem)] self-start space-y-4 overflow-y-auto rounded-3xl bg-brand-500 to-[#3d0b1c] p-5 text-white shadow-[0_24px_60px_-20px_rgba(86,16,39,0.6)] sm:p-6 lg:top-20 lg:max-h-[calc(100svh-6rem)]"
         >
+          <div className="mb-1 flex items-center gap-2">
+            <span className="flex size-9 items-center justify-center rounded-xl bg-white/10">
+              <Sparkles aria-hidden="true" className="size-5 text-brand-100" />
+            </span>
+            <div>
+              <p className="text-sm font-bold">Your preferences</p>
+              <p className="text-xs text-white/60">Results update as you type.</p>
+            </div>
+          </div>
           <div>
             <label
               htmlFor="match-location"
-              className="mb-1.5 block text-sm font-semibold text-ink-800"
+              className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-white/70"
             >
               Preferred area
             </label>
@@ -123,14 +130,14 @@ export function MatchFinder() {
                 updatePreferences({ location: event.target.value })
               }
               placeholder="City, neighbourhood, or university"
-              className="h-10 w-full rounded-field border border-ink-200 px-3 text-sm text-ink-900 placeholder:text-ink-400"
+              className="h-11 w-full rounded-2xl border-0 bg-white/10 px-4 text-sm text-white placeholder:text-white/45 outline-none ring-1 ring-inset ring-white/10 transition focus:bg-white/15 focus:ring-2 focus:ring-white/50"
             />
           </div>
 
           <div>
             <label
               htmlFor="match-budget"
-              className="mb-1.5 block text-sm font-semibold text-ink-800"
+              className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-white/70"
             >
               Maximum rent per year (₦)
             </label>
@@ -149,14 +156,14 @@ export function MatchFinder() {
                 })
               }
               placeholder="Any budget"
-              className="h-10 w-full rounded-field border border-ink-200 px-3 text-sm text-ink-900 placeholder:text-ink-400"
+              className="h-11 w-full rounded-2xl border-0 bg-white/10 px-4 text-sm text-white placeholder:text-white/45 outline-none ring-1 ring-inset ring-white/10 transition focus:bg-white/15 focus:ring-2 focus:ring-white/50"
             />
           </div>
 
           <div>
             <label
               htmlFor="match-type"
-              className="mb-1.5 block text-sm font-semibold text-ink-800"
+              className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-white/70"
             >
               Home type
             </label>
@@ -167,20 +174,21 @@ export function MatchFinder() {
                 isPropertyType(event.target.value) &&
                 updatePreferences({ propertyType: event.target.value })
               }
-              className="h-10 w-full rounded-field border border-ink-200 bg-white px-3 text-sm text-ink-900"
+              className="h-11 w-full rounded-2xl border-0 bg-white/10 px-4 text-sm text-white placeholder:text-white/45 outline-none ring-1 ring-inset ring-white/10 transition focus:bg-white/15 focus:ring-2 focus:ring-white/50 [&>option]:bg-white [&>option]:text-ink-900"
             >
               <option value="any">Any home type</option>
-              <option value="studio">Studio / self-contained</option>
-              <option value="shared">Shared accommodation</option>
-              <option value="one_bedroom">One bedroom</option>
-              <option value="two_bedroom">Two bedrooms</option>
+              {PROPERTY_TYPES.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
             </select>
           </div>
 
           <div>
             <label
               htmlFor="match-bedrooms"
-              className="mb-1.5 block text-sm font-semibold text-ink-800"
+              className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-white/70"
             >
               Minimum bedrooms
             </label>
@@ -190,7 +198,7 @@ export function MatchFinder() {
               onChange={(event) =>
                 updatePreferences({ minBedrooms: Number(event.target.value) })
               }
-              className="h-10 w-full rounded-field border border-ink-200 bg-white px-3 text-sm text-ink-900"
+              className="h-11 w-full rounded-2xl border-0 bg-white/10 px-4 text-sm text-white placeholder:text-white/45 outline-none ring-1 ring-inset ring-white/10 transition focus:bg-white/15 focus:ring-2 focus:ring-white/50 [&>option]:bg-white [&>option]:text-ink-900"
             >
               <option value={0}>Any number</option>
               <option value={1}>1 bedroom or more</option>
@@ -199,19 +207,19 @@ export function MatchFinder() {
             </select>
           </div>
 
-          <label className="flex min-h-12 cursor-pointer items-center gap-3 rounded-field border border-ink-200 px-4 text-sm font-medium text-ink-800">
+          <label className="flex min-h-12 cursor-pointer items-center gap-3 rounded-2xl bg-white/10 px-4 text-sm font-medium text-white ring-1 ring-inset ring-white/10 transition hover:bg-white/15">
             <input
               type="checkbox"
               checked={preferences.verifiedOnly}
               onChange={(event) =>
                 updatePreferences({ verifiedOnly: event.target.checked })
               }
-              className="size-4 accent-brand-800"
+              className="size-4 accent-white"
             />
             Show verified listings only
           </label>
 
-          <p className="text-xs leading-5 text-ink-500">
+          <p className="text-xs leading-5 text-white/55">
             Ranked from listing details. Your preferences aren&apos;t saved.
           </p>
         </form>

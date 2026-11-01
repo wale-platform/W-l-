@@ -3,7 +3,7 @@ import { Loader2 } from "lucide-react";
 import { variants } from "@/lib/utils/variants";
 
 const button = variants(
-  "inline-flex items-center justify-center gap-2 rounded-field font-medium whitespace-nowrap " +
+  "inline-flex items-center justify-center gap-2 rounded-full font-semibold whitespace-nowrap " +
     "transition-colors duration-150 ease-out-soft " +
     "disabled:pointer-events-none disabled:opacity-55",
   {

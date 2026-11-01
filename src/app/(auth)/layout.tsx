@@ -1,80 +1,37 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { Logo } from "@/components/brand/Logo";
-
-const benefits = [
-  "In-person verified listings near your campus",
-  "Zero agent runaround or hidden viewing fees",
-  "Direct communication with landlords and owners",
-];
+import { AuthShowcase } from "@/components/auth/AuthShowcase";
 
 export default function AuthLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="flex min-h-screen bg-[#f4f8f6]">
-      {/* Left side - Brand/Marketing Pane (Hidden on Mobile/Tablet) */}
-      <div className="relative hidden w-1/2 overflow-hidden bg-brand-950 lg:block">
-        {/* Decorative radial gradient wash */}
+    <div className="flex min-h-screen bg-[#fbf7f8]">
+      {/* Left side - brand showcase (desktop only). Sticky, so it stays in
+          view while a long form (sign-up) scrolls on the right. */}
+      <div className="relative hidden w-1/2 self-start overflow-hidden bg-gradient-to-br from-[#fff8fb] via-[#fdf1f5] to-[#f7e3eb] lg:sticky lg:top-0 lg:block lg:h-screen">
+        {/* Soft colour washes behind the collage */}
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-0 bg-[radial-gradient(80%_80%_at_50%_40%,rgba(30,158,102,0.25),transparent_70%)]"
+          className="pointer-events-none absolute inset-0 bg-[radial-gradient(60%_50%_at_20%_15%,rgba(255,255,255,0.9),transparent_70%),radial-gradient(55%_45%_at_85%_80%,rgba(122,23,55,0.12),transparent_70%)]"
         />
 
-        <div className="relative flex h-full flex-col justify-between p-12 xl:p-16">
-          {/* Logo link back to home */}
-          <div>
-            <Link
-              href="/"
-              className="inline-flex rounded-field focus-visible:outline-white"
-              aria-label="WALE Housing — home"
-            >
-              <Logo tone="inverse" />
-            </Link>
+        {/* Everything is sized to the viewport height, so the panel never scrolls. */}
+        <div className="relative flex h-full flex-col overflow-hidden px-10 py-8 xl:px-14 xl:py-10">
+          <Link
+            href="/"
+            className="inline-flex w-fit rounded-field focus-visible:outline-brand-600"
+            aria-label="WALE Housing — home"
+          >
+            <Logo />
+          </Link>
+
+          <div className="flex min-h-0 flex-1 justify-center py-[clamp(1rem,3vh,2.5rem)]">
+            <AuthShowcase />
           </div>
 
-          {/* Value Proposition */}
-          <div className="my-auto max-w-md space-y-8">
-            <div className="space-y-4">
-              <h2 className="text-3xl font-semibold tracking-tight text-white xl:text-4xl">
-                Spaces that inspire life.
-              </h2>
-              <p className="text-lg leading-relaxed text-brand-200">
-                Find your home with no hassle. WALE helps Nigerian students discover and secure housing near their university.
-              </p>
-            </div>
-
-            <ul className="space-y-4" role="list">
-              {benefits.map((benefit, index) => (
-                <li key={index} className="flex items-start gap-3">
-                  <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-brand-800 text-brand-300">
-                    <svg
-                      aria-hidden="true"
-                      className="size-3.5"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                    >
-                      <path
-                        d="m5 12 4 4L19 6"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  </span>
-                  <span className="text-sm font-medium text-brand-100">
-                    {benefit}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {/* Footer note */}
-          <div>
-            <p className="text-xs text-brand-400">
-              © {new Date().getFullYear()} WALE Housing. All rights reserved.
-            </p>
-          </div>
+          <p className="text-xs text-ink-500">
+            © {new Date().getFullYear()} WALE Housing. All rights reserved.
+          </p>
         </div>
       </div>
 
@@ -82,7 +39,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
       <div className="relative flex w-full flex-col justify-between overflow-hidden px-4 py-5 sm:px-8 sm:py-8 lg:w-1/2 lg:px-10 xl:px-16">
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(25,135,87,0.10),transparent_45%),radial-gradient(ellipse_at_bottom_left,rgba(25,135,87,0.07),transparent_40%)]"
+          className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(122,23,55,0.08),transparent_45%),radial-gradient(ellipse_at_bottom_left,rgba(122,23,55,0.05),transparent_40%)]"
         />
         {/* Simple top bar with Back to Home button */}
         <div className="relative flex items-center justify-between lg:justify-end">
@@ -104,7 +61,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
 
         {/* Auth form center content */}
         <div className="relative my-auto mx-auto w-full max-w-[520px] py-8">
-          <div className="rounded-3xl border border-white/90 bg-white/95 p-5 shadow-[0_24px_80px_rgba(21,58,42,0.12)] backdrop-blur sm:p-8 xl:p-9">
+          <div className="rounded-3xl border border-white/90 bg-white/95 p-5 shadow-[0_24px_80px_rgba(86,16,39,0.10)] backdrop-blur sm:p-8 xl:p-9">
             {children}
           </div>
         </div>

@@ -65,6 +65,21 @@
   --shadow-lifted: 0 2px 4px 0 rgb(14 17 16 / 0.04), 0 12px 32px -8px rgb(14 17 16 / 0.14);
 
   --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* Gentle bob for decorative stickers (auth page). Disabled for users who
+     prefer reduced motion by the global rule at the end of this file. */
+  --animate-float: float 6s ease-in-out infinite;
+  --animate-float-slow: float 8s ease-in-out infinite;
+
+  @keyframes float {
+    0%,
+    100% {
+      transform: translateY(0) rotate(var(--float-rotate, 0deg));
+    }
+    50% {
+      transform: translateY(-10px) rotate(var(--float-rotate, 0deg));
+    }
+  }
 }
 
 /*

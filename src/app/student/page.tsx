@@ -41,7 +41,7 @@ export default function StudentDashboardPage() {
   // 2. Fetch Inspection Requests
   const { data: inspections, isLoading: isInspectionsLoading } = useQuery({
     queryKey: ["inspections"],
-    queryFn: inspectionsApi.listRequests,
+    queryFn: () => inspectionsApi.listRequests("mine"),
   });
 
   // 3. Fetch Properties near their university

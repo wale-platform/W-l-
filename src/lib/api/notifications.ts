@@ -1,42 +1,51 @@
-export interface Notification {
-  id: string;
-  title: string;
-  body: string;
-  read: boolean;
-  createdAt: string;
+import { z } from "zod";
+
+const notificationSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  body: z.string(),
+  link: z.string().nullable(),
+  read: z.boolean(),
+  createdAt: z.string(),
+});
+
+const notificationListSchema = z.object({
+  unreadCount: z.number().int(),
+  notifications: z.array(notificationSchema),
+});
+
+export type Notification = z.infer<typeof notificationSchema>;
+export type NotificationList = z.infer<typeof notificationListSchema>;
+
+async function request(init?: RequestInit): Promise<unknown> {
+  const response = await fetch("/api/notifications", {
+    credentials: "same-origin",
+    cache: "no-store",
+    ...init,
+    headers: { "Content-Type": "application/json", ...init?.headers },
+  });
+  const result: unknown = await response.json().catch(() => null);
+  if (!response.ok) {
+    const message =
+      typeof result === "object" && result !== null && "message" in result && typeof result.message === "string"
+        ? result.message
+        : "Notifications couldn't be loaded.";
+    throw new Error(message);
+  }
+  return result;
 }
 
-const defaultNotifications: Notification[] = [
-  {
-    id: "notif-001",
-    title: "Inspection Approved",
-    body: "Your inspection request for 'Modern self-contained studio at Tanke' has been approved for August 25th.",
-    read: false,
-    createdAt: "2026-08-18T10:05:00.000Z",
-  },
-  {
-    id: "notif-002",
-    title: "Welcome to WALE",
-    body: "Thanks for creating your account. Complete your student profile to receive tailored hostel suggestions.",
-    read: true,
-    createdAt: "2026-08-17T09:00:00.000Z",
-  },
-];
-
 export const notificationsApi = {
-  /**
-   * Get list of notification items for the current student.
-   */
-  async list(): Promise<Notification[]> {
-    await new Promise((resolve) => setTimeout(resolve, 400));
-    return defaultNotifications;
+  /** The signed-in user's recent notifications and unread count. */
+  async list(): Promise<NotificationList> {
+    return notificationListSchema.parse(await request());
   },
 
-  /**
-   * Mark all notifications as read.
-   */
-  async markAllAsRead(): Promise<{ success: boolean }> {
-    await new Promise((resolve) => setTimeout(resolve, 400));
-    return { success: true };
+  async markAllAsRead(): Promise<void> {
+    await request({ method: "POST", body: JSON.stringify({ all: true }) });
+  },
+
+  async markAsRead(ids: string[]): Promise<void> {
+    await request({ method: "POST", body: JSON.stringify({ ids }) });
   },
 };

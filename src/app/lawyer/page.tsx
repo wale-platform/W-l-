@@ -10,8 +10,8 @@ import { Plus, Home, Clock, CheckCircle, ShieldAlert } from "lucide-react";
 export default function LawyerDashboardPage() {
   // Fetch properties uploaded by the lawyer
   const { data, isLoading } = useQuery({
-    queryKey: ["lawyerProperties"],
-    queryFn: () => propertyApi.list({ source: "lawyer" }),
+    queryKey: ["myProperties"],
+    queryFn: () => propertyApi.listMine(),
   });
 
   const properties = data?.properties || [];

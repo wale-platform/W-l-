@@ -11,14 +11,14 @@ import { Plus, Home, Clock, CheckCircle, Calendar } from "lucide-react";
 export default function LandlordDashboard() {
   // Fetch landlord properties
   const { data: propertiesData, isLoading: isPropsLoading } = useQuery({
-    queryKey: ["landlordProperties"],
-    queryFn: () => propertyApi.list({ source: "landlord" }),
+    queryKey: ["myProperties"],
+    queryFn: () => propertyApi.listMine(),
   });
 
   // Fetch inspections
   const { data: inspectionsData, isLoading: isInspsLoading } = useQuery({
     queryKey: ["landlordInspections"],
-    queryFn: () => inspectionsApi.listRequests(),
+    queryFn: () => inspectionsApi.listRequests("owner"),
   });
 
   const properties = propertiesData?.properties || [];

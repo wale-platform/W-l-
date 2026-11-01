@@ -10,10 +10,12 @@ export const siteConfig = {
   tagline: "Find your home with no hassle.",
   description:
     "Verified student housing across Nigeria. Search trusted listings near your university, compare real prices, and book inspections without agent runaround.",
-  url: process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.waleonline.com.ng",
+  // `||`, not `??`: an empty NEXT_PUBLIC_SITE_URL= line must fall back too.
+  // Trailing slashes are trimmed so `${url}/path` never doubles up.
+  url: (process.env.NEXT_PUBLIC_SITE_URL || "https://waleonline.com.ng").replace(/\/+$/, ""),
   locale: "en_NG",
   contact: {
-    email: "hello@walehousing.ng",
+    email: "build.waleplartform@gmail.com",
     phone: "+234 800 000 0000",
     address: "Ilorin, Kwara State, Nigeria",
   },
@@ -38,7 +40,7 @@ export const footerNav = [
       { label: "Browse homes", href: "/properties" },
       { label: "AI Match", href: "/match" },
       { label: "Search the map", href: "/map" },
-      { label: "Join waitlist", href: "/#waitlist" },
+      { label: "Create an account", href: "/signup" },
     ],
   },
   {

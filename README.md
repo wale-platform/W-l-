@@ -34,19 +34,28 @@ npm install
 ```
 
 Copy `.env.example` to `.env.local` and set `DATABASE_URL` to the Neon
-PostgreSQL connection string. For admin waitlist operations, also set
-`ADMIN_API_KEY` to a randomly generated secret of at least 32 characters.
-To enable Google sign-in, set `NEXT_PUBLIC_GOOGLE_CLIENT_ID` to a Web OAuth
-client ID created in Google Cloud Console. Add each local/deployed origin to the
-OAuth client's authorized JavaScript origins, then restart the app after
-changing the value.
+PostgreSQL connection string.
+To enable Google sign-in, create a **Web application** OAuth client in Google
+Cloud Console and set `NEXT_PUBLIC_GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`.
+Under **Authorized redirect URIs**, add `/api/auth/callback/google` on every
+origin the app runs on, for example
+`http://localhost:3000/api/auth/callback/google` and
+`https://waleonline.com.ng/api/auth/callback/google`. Production builds
+use `NEXT_PUBLIC_SITE_URL` for the callback, so it must match. Restart the app
+after changing these values.
+To send password-reset and email-confirmation emails, set `SENDBYTE_API_KEY`
+and `EMAIL_FROM` (a sender on a domain verified in SendByte, currently
+`WALE <noreply@www.waleonline.com.ng>` — Gmail addresses can't be used). Emails go
+through [SendByte](https://docs.sendbyte.africa): a `sk_test_` key accepts
+emails without delivering them, a `sk_live_` key delivers them and requires
+`EMAIL_FROM` to be on a domain verified in SendByte,
+and set `NEXT_PUBLIC_SITE_URL` to the public site address used in emailed links.
+Without these settings, development prints each email — including its
+link — to the server console; production reports an error instead.
+Contact-page messages are saved in the Neon `contact_messages` table and
+forwarded to `CONTACT_INBOX_EMAIL` (defaulting to the public contact address
+in `src/config/site.ts`) with Reply-To set to the sender.
 Keep `.env.local` private; it is ignored by Git.
-
-Generate a suitable key with Node.js:
-
-```bash
-node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"
-```
 
 ```bash
 npm run dev
@@ -110,21 +119,97 @@ Switching to the real API is one environment variable:
 NEXT_PUBLIC_API_BASE_URL=https://api.walehousing.ng
 ```
 
-Waitlist signups are stored by the server-side `/api/waitlist` handler in the
-Neon `waitlist_signups` table. The endpoint creates the table if needed and
-adds the phone and status columns to an existing table if needed, preserving existing
-signups. It validates submitted fields and treats an existing email as an
-already-recorded signup. The database URL is read only from the server-side
-`DATABASE_URL` environment variable.
-
-Admins can manage signup statuses and export filtered waitlist records as CSV
-from `/admin/waitlist`. The page requires the server-side `ADMIN_API_KEY`;
-enter it when prompted. The key is held in page memory only, and list/update
-requests are rejected unless the matching server environment variable is set.
-Keep the key private and rotate it if it is exposed.
-
 Nothing else changes. The handlers add ~600ms of latency on purpose, so loading
 skeletons are actually observable in development.
+
+### Authentication uses database sessions in an httpOnly cookie
+
+Accounts live in the Neon `users` table (created on first use alongside
+`sessions`, `properties` and `property_images`). Passwords are hashed with
+Node's built-in scrypt. Logging in, signing up or signing in with Google
+(`/api/auth/*`) stores a random session token in the httpOnly `wale_session`
+cookie; the database keeps only its SHA-256, and logging out deletes the row.
+
+`src/proxy.ts` redirects signed-out visitors away from the dashboards
+(an optimistic cookie check only). Each dashboard layout then confirms the
+role through `/api/auth/me`, and every protected route handler checks the
+session itself with `requireUser()` from `src/lib/server/session.ts`.
+
+The full account lifecycle is handled:
+
+- **Sign up / log in / log out** — email and password, or Google via the
+  server-side OAuth code flow (`/api/auth/google/start` → Google →
+  `/api/auth/callback/google`, with PKCE, state and nonce checks). Google
+  sign-up creates an account with the type chosen on the sign-up page;
+  signing in with an unknown Google account sends you to sign-up instead.
+  A Google account with the same verified email as an existing account is
+  linked to it. "Remember me"
+  keeps the session for 30 days; unchecked, it ends with the browser.
+- **Email confirmation** — sign-up emails a confirmation link
+  (`/verify-email`); dashboards show a reminder with a resend button until it
+  is confirmed. Google accounts are confirmed automatically.
+- **Forgot / reset password** — `/forgot-password` emails a one-hour,
+  single-use link to `/reset-password`. The response is the same whether or
+  not the email has an account. Resetting signs out every other device.
+- **Change password** — `/account`, which also lets Google-only accounts set
+  a password.
+
+Emailed links use single-use tokens stored as hashes in `auth_tokens`, and
+each kind of email can be sent to an account at most once a minute.
+
+Admins cannot sign themselves up. Promote an existing account in Neon:
+
+```sql
+UPDATE users SET role = 'admin' WHERE email = 'you@example.com';
+```
+
+### Wallet payments: Paystack and Flutterwave
+
+Signed-in users fund a WALE wallet at `/wallet` using either gateway's hosted
+checkout (card details never touch WALE). Set `PAYSTACK_SECRET_KEY`,
+`FLUTTERWAVE_SECRET_KEY` and `FLUTTERWAVE_WEBHOOK_HASH`; a gateway without a
+key is shown as unavailable.
+
+1. `POST /api/payments/initialize` records a `pending` payment with our own
+   reference and returns the gateway checkout URL.
+2. The gateway sends the payer back to `/api/payments/callback/{paystack|flutterwave}`,
+   which **verifies the payment with the gateway's API** before crediting.
+3. Webhooks credit the wallet even if the payer closes the tab:
+   - Paystack → `<site>/api/payments/webhook/paystack` (checked with the
+     HMAC-SHA512 `x-paystack-signature`).
+   - Flutterwave → `<site>/api/payments/webhook/flutterwave`, with the
+     dashboard "Secret hash" equal to `FLUTTERWAVE_WEBHOOK_HASH`. The event is
+     re-verified with Flutterwave's API before crediting.
+
+A payment is credited only if the gateway confirms it succeeded in NGN for at
+least the requested amount, and in one SQL statement guarded by
+`status = 'pending'`, so the redirect and the webhook can both arrive and the
+wallet is still credited exactly once. Balances are stored in kobo.
+
+### Notifications
+
+The header bell shows the unread count from the `notifications` table
+(refreshed every minute). Notifications are created for sign-up, submitted
+and verified listings, and wallet top-ups; `/notifications` lists them and
+marks them read.
+
+### One app frame for signed-in users
+
+Once logged in, every page — dashboards and public pages such as Browse Homes,
+the map and About — uses `AppShell`: a fixed sidebar on desktop (a drawer on
+mobile) with role-specific links, and a header showing the user's name, role,
+wallet balance and notification bell. Visitors who aren't logged in see the
+marketing navbar instead (`SiteChrome`).
+
+### Landlords upload listings with photos
+
+Landlords, lawyers and outgoing tenants submit listings with 1–8 photos as a
+multipart `POST /api/properties`. Photos are downscaled in the browser to
+1600px JPEGs, checked by file signature on the server, stored in
+`property_images`, and served from `/api/property-images/[id]`. New listings
+start unverified; admins verify them with `PATCH /api/properties/[id]`, and
+owners can delete their own. Submitted listings are merged with the bundled
+sample listings in search results.
 
 ### Zod schemas are the single source of truth
 
@@ -262,11 +347,11 @@ This version differs from older tutorials in ways that matter here:
 ## Status
 
 **Shipped** — design tokens and brand, component library, layout shell, mock API
-with Zod-validated fixtures, public pages, preference-based AI Match, and an
+with Zod-validated fixtures, public pages, preference-based AI Match, cookie-session authentication (sign-up, login, Google,
+email confirmation, password reset and change) with `proxy.ts` guarding, landlord listing uploads with photos, and an
 interactive postcode/location map search with `sitemap.ts` and `robots.ts`.
 
-**Next** — authentication (login, register, forgot password, email verification,
-cookie route handlers, `proxy.ts` guarding), then the student experience
+**Next** — the student experience
 (dashboard, search with filters, listings grid, property details with gallery,
 profile management).
 

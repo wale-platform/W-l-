@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { authApi } from "./auth";
 
 // Schema for student profile validation
 export const studentProfileSchema = z.object({
@@ -40,9 +41,7 @@ export const usersApi = {
     
     if (typeof window === "undefined") return defaultProfile;
 
-    // Retrieve currently logged-in user from localStorage
-    const userStr = localStorage.getItem("wale_user");
-    const user = userStr ? JSON.parse(userStr) : null;
+    const user = await authApi.me();
     
     if (!user) {
       return defaultProfile;
@@ -53,7 +52,7 @@ export const usersApi = {
     if (!data) {
       // Create a default profile seeded with the logged-in user's data
       const userDefaultProfile: StudentProfile = {
-        name: user.fullName || user.name || "Student",
+        name: user.fullName,
         email: user.email,
         phone: user.phone || "08012345678",
         university: user.university || "unilorin",
@@ -83,8 +82,7 @@ export const usersApi = {
     await new Promise((resolve) => setTimeout(resolve, 1000)); // Simulate API delay
 
     if (typeof window !== "undefined") {
-      const userStr = localStorage.getItem("wale_user");
-      const user = userStr ? JSON.parse(userStr) : null;
+      const user = await authApi.me();
       const userProfileKey = user ? `${LOCAL_STORAGE_KEY}_${user.email}` : LOCAL_STORAGE_KEY;
       localStorage.setItem(userProfileKey, JSON.stringify(validated));
     }

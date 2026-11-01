@@ -1,8 +1,10 @@
 "use client";
 
+import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { PropertyCard } from "@/components/ui/PropertyCard";
+import { BoostDialog, BoostReturnNotice } from "@/components/property/BoostDialog";
 import { Container, Section, SectionHeading } from "@/components/layout/Container";
 import { Button, Card, CardBody, CardHeader, CardTitle, toast } from "@/components/ui";
 import { propertyApi } from "@/lib/api/property";
@@ -10,11 +12,12 @@ import { Plus } from "lucide-react";
 
 export default function LawyerPropertiesPage() {
   const queryClient = useQueryClient();
+  const [boosting, setBoosting] = useState<{ id: string; title: string } | null>(null);
 
   // Fetch properties uploaded by this lawyer
   const { data, isLoading } = useQuery({
-    queryKey: ["lawyerProperties"],
-    queryFn: () => propertyApi.list({ source: "lawyer" }),
+    queryKey: ["myProperties"],
+    queryFn: () => propertyApi.listMine(),
   });
 
   // Delete mutation
@@ -22,9 +25,9 @@ export default function LawyerPropertiesPage() {
     mutationFn: (id: string) => propertyApi.delete(id),
     onSuccess: () => {
       toast.success("Listing deleted", { description: "The property listing has been successfully removed." });
-      queryClient.invalidateQueries({ queryKey: ["lawyerProperties"] });
+      queryClient.invalidateQueries({ queryKey: ["myProperties"] });
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       toast.error("Failed to delete", { description: err.message || "An error occurred." });
     },
   });
@@ -65,6 +68,10 @@ export default function LawyerPropertiesPage() {
             </Link>
           </div>
 
+          <Suspense fallback={null}>
+            <BoostReturnNotice />
+          </Suspense>
+
           {properties.length === 0 ? (
             <Card>
               <CardBody className="flex flex-col items-center gap-4 py-16 text-center">
@@ -98,6 +105,10 @@ export default function LawyerPropertiesPage() {
                   price={property.price}
                   location={property.address}
                   status={property.verified ? "approved" : "pending"}
+                  image={property.images[0]}
+                  href={`/properties/${property.id}`}
+                  boostedUntil={property.boostedUntil}
+                  onBoost={() => setBoosting({ id: property.id, title: property.title })}
                   onDelete={() => {
                     if (confirm("Are you sure you want to delete this listing?")) {
                       deleteMutation.mutate(property.id);
@@ -109,6 +120,11 @@ export default function LawyerPropertiesPage() {
           )}
         </Container>
       </Section>
+      <BoostDialog
+        listing={boosting}
+        onClose={() => setBoosting(null)}
+        onBoosted={() => queryClient.invalidateQueries({ queryKey: ["myProperties"] })}
+      />
     </main>
   );
 }

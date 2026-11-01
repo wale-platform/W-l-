@@ -81,7 +81,7 @@ const faqs = [
       },
       {
         q: "How do I become a WALE verification agent?",
-        a: "We hire verification agents in each university town we cover. The role involves visiting properties, confirming details with landlords, photographing interiors and exteriors, and filing reports. If you are local to one of our coverage areas and interested, email us at hello@walehousing.ng with \"Verification agent\" in the subject.",
+        a: "We hire verification agents in each university town we cover. The role involves visiting properties, confirming details with landlords, photographing interiors and exteriors, and filing reports. If you are local to one of our coverage areas and interested, email us at build.waleplartform@gmail.com with \"Verification agent\" in the subject.",
       },
     ],
   },

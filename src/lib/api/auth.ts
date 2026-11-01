@@ -1,301 +1,129 @@
-import { loginSchema, type LoginData, type SignUpFormData } from "./schemas";
+import {
+  authUserSchema,
+  loginSchema,
+  type AuthUser,
+  type ChangePasswordData,
+  type ForgotPasswordData,
+  type LoginData,
+  type ResetPasswordData,
+  type SignUpFormData,
+} from "./schemas";
 
-export type AuthUser = {
-  id: string;
-  fullName: string;
-  email: string;
-  phone?: string;
-  role: "student" | "landlord" | "lawyer" | "tenant" | "admin";
-  university?: string;
-  createdAt: string;
-};
+export type { AuthUser };
 
-interface StoredAuthUser {
-  id: string;
-  fullName?: string;
-  name?: string;
-  email: string;
-  role: AuthUser["role"];
-  password?: string;
-  phone?: string;
-  university?: string;
-  createdAt?: string;
-  authProvider?: "google";
+/**
+ * Auth always talks to this app's own route handlers (`/api/auth/*`), not
+ * `NEXT_PUBLIC_API_BASE_URL`, because the session cookie is set on this
+ * origin. The cookie is httpOnly, so nothing here can read or store the
+ * session token — the browser sends it automatically.
+ */
+async function authFetch(
+  path: string,
+  init: RequestInit,
+  fallbackMessage: string,
+): Promise<{ message: string; result: unknown }> {
+  const response = await fetch(`/api/auth/${path}`, {
+    ...init,
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json", ...init.headers },
+  });
+
+  const result: unknown = await response.json().catch(() => null);
+  const message =
+    typeof result === "object" &&
+    result !== null &&
+    "message" in result &&
+    typeof result.message === "string"
+      ? result.message
+      : fallbackMessage;
+
+  if (!response.ok) throw new Error(message);
+  return { message, result };
 }
 
-export const DEFAULT_USERS: StoredAuthUser[] = [
-  {
-    id: "usr_abdul",
-    fullName: "Abdurrahman Suleiman",
-    name: "Abdurrahman Suleiman",
-    email: "abdul@example.com",
-    role: "student",
-    password: "Password123",
-    phone: "08012345678",
-    university: "unilorin",
-    createdAt: "2026-08-20T10:00:00.000Z",
-  },
-  {
-    id: "usr_amina",
-    fullName: "Amina Bello",
-    name: "Amina Bello",
-    email: "amina@example.com",
-    role: "student",
-    password: "Password123",
-    phone: "08012345678",
-    university: "unilorin",
-    createdAt: "2026-08-20T11:00:00.000Z",
-  },
-  {
-    id: "usr_kolalandlord",
-    fullName: "Alhaji Kolawole",
-    name: "Alhaji Kolawole",
-    email: "kolalandlord@gmail.com",
-    role: "landlord",
-    password: "Password123",
-    phone: "08011112222",
-    createdAt: "2026-08-10T12:00:00.000Z",
-  },
-  {
-    id: "usr_okonlawyer",
-    fullName: "Barrister Okon",
-    name: "Barrister Okon",
-    email: "okonlawyer@yahoo.com",
-    role: "lawyer",
-    password: "Password123",
-    phone: "08022223333",
-    createdAt: "2026-08-12T14:30:00.000Z",
-  },
-  {
-    id: "usr_chiomatenant",
-    fullName: "Chioma Nwachukwu",
-    name: "Chioma Nwachukwu",
-    email: "chiomatenant@gmail.com",
-    role: "tenant",
-    password: "Password123",
-    phone: "08033334444",
-    createdAt: "2026-08-14T09:15:00.000Z",
-  },
-  {
-    id: "usr_aminastudent",
-    fullName: "Amina Bello",
-    name: "Amina Bello",
-    email: "aminastudent@unilorin.edu.ng",
-    role: "student",
-    password: "Password123",
-    phone: "08012345678",
-    university: "unilorin",
-    createdAt: "2026-08-18T10:00:00.000Z",
-  },
-  {
-    id: "usr_tundestudent",
-    fullName: "Tunde Olowo",
-    name: "Tunde Olowo",
-    email: "tundestudent@unilorin.edu.ng",
-    role: "student",
-    password: "Password123",
-    phone: "08055556666",
-    university: "unilorin",
-    createdAt: "2026-08-20T11:45:00.000Z",
-  },
-  {
-    id: "usr_admin",
-    fullName: "Admin User",
-    name: "Admin User",
-    email: "admin@wale.ng",
-    role: "admin",
-    password: "Password123",
-    phone: "08099999999",
-    createdAt: "2026-08-01T08:00:00.000Z",
-  },
-];
-
-function isAuthRole(role: unknown): role is AuthUser["role"] {
-  return (
-    role === "student" ||
-    role === "landlord" ||
-    role === "lawyer" ||
-    role === "tenant" ||
-    role === "admin"
+/** For endpoints that sign the user in and return their account. */
+async function authRequest(
+  path: string,
+  init: RequestInit,
+  fallbackMessage: string,
+): Promise<{ message: string; user: AuthUser }> {
+  const { message, result } = await authFetch(path, init, fallbackMessage);
+  const user = authUserSchema.safeParse(
+    typeof result === "object" && result !== null && "user" in result ? result.user : null,
   );
+  if (!user.success) throw new Error("The server returned an invalid account response.");
+
+  return { message, user: user.data };
 }
 
-function isAuthUser(value: unknown): value is AuthUser {
-  if (typeof value !== "object" || value === null) return false;
-  return (
-    "id" in value &&
-    typeof value.id === "string" &&
-    "email" in value &&
-    typeof value.email === "string" &&
-    "fullName" in value &&
-    typeof value.fullName === "string" &&
-    "role" in value &&
-    isAuthRole(value.role) &&
-    "createdAt" in value &&
-    typeof value.createdAt === "string" &&
-    (!("phone" in value) || typeof value.phone === "string") &&
-    (!("university" in value) || typeof value.university === "string")
-  );
-}
-
-function isStoredAuthUser(value: unknown): value is StoredAuthUser {
-  if (typeof value !== "object" || value === null) return false;
-  return (
-    "id" in value &&
-    typeof value.id === "string" &&
-    "email" in value &&
-    typeof value.email === "string" &&
-    "role" in value &&
-    isAuthRole(value.role) &&
-    (!("fullName" in value) || typeof value.fullName === "string") &&
-    (!("name" in value) || typeof value.name === "string") &&
-    (!("password" in value) || typeof value.password === "string") &&
-    (!("phone" in value) || typeof value.phone === "string") &&
-    (!("university" in value) || typeof value.university === "string") &&
-    (!("createdAt" in value) || typeof value.createdAt === "string")
-  );
-}
-
-function getStoredUsers(): StoredAuthUser[] {
-  if (typeof window === "undefined") return DEFAULT_USERS;
-
-  const storedUsers = localStorage.getItem("wale_mock_registered_users");
-  if (!storedUsers) {
-    localStorage.setItem("wale_mock_registered_users", JSON.stringify(DEFAULT_USERS));
-    return DEFAULT_USERS;
-  }
-
-  const users: unknown = JSON.parse(storedUsers);
-  if (!Array.isArray(users) || !users.every(isStoredAuthUser)) {
-    throw new Error("Saved account data is invalid. Clear the damaged account data and try again.");
-  }
-  return users;
-}
+const post = (body: unknown): RequestInit => ({ method: "POST", body: JSON.stringify(body) });
 
 export const authApi = {
   /**
    * Log in a user with email and password.
    */
-  async login(payload: LoginData): Promise<{ message: string; user: AuthUser; token: string }> {
+  async login(payload: LoginData): Promise<{ message: string; user: AuthUser }> {
     const validated = loginSchema.parse(payload);
-
-    // Mock network delay:
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-
-    const users = getStoredUsers();
-
-    const found = users.find((user) => user.email.toLowerCase() === validated.email.toLowerCase());
-    if (!found) {
-      throw new Error("Account not found. Please create an account before logging in.");
-    }
-
-    if (!found.password) {
-      throw new Error("This account uses Google sign-in. Continue with Google to log in.");
-    }
-    if (found.password !== validated.password) {
-      throw new Error("Invalid email or password.");
-    }
-
-    const authUser: AuthUser = {
-      id: found.id,
-      fullName: found.fullName || found.name || found.email,
-      email: found.email,
-      phone: found.phone,
-      role: found.role,
-      university: found.university,
-      createdAt: found.createdAt || new Date().toISOString(),
-    };
-
-    return {
-      message: "Welcome back!",
-      user: authUser,
-      token: "mock_jwt_token_header_payload_signature",
-    };
-  },
-
-  async loginWithGoogle(
-    credential: string,
-    accountRole: "student" | "landlord" | "lawyer" | "tenant" = "student",
-  ): Promise<{ message: string; user: AuthUser }> {
-    const response = await fetch("/api/auth/google", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ credential, role: accountRole }),
-    });
-
-    const result: unknown = await response.json();
-    if (!response.ok) {
-      const message =
-        typeof result === "object" &&
-        result !== null &&
-        "message" in result &&
-        typeof result.message === "string"
-          ? result.message
-          : "Google sign-in could not be completed.";
-      throw new Error(message);
-    }
-
-    if (
-      typeof result !== "object" ||
-      result === null ||
-      !("user" in result) ||
-      !isAuthUser(result.user)
-    ) {
-      throw new Error("Google sign-in returned an invalid account response.");
-    }
-
-    return {
-      message:
-        "message" in result && typeof result.message === "string"
-          ? result.message
-          : "Signed in with Google.",
-      user: result.user,
-    };
+    return authRequest(
+      "login",
+      post(validated),
+      "Login could not be completed.",
+    );
   },
 
   /**
-   * Register a new user account.
+   * Register a new user account. The server signs the new user in.
    */
-  async signUp(payload: SignUpFormData): Promise<{ message: string; user: AuthUser; token: string }> {
-    // Mock network delay:
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+  async signUp(payload: SignUpFormData): Promise<{ message: string; user: AuthUser }> {
+    return authRequest(
+      "signup",
+      post(payload),
+      "Your account could not be created.",
+    );
+  },
 
-    const users = getStoredUsers();
+  /** Emails a reset link. Resolves the same way whether or not the account exists. */
+  async forgotPassword(payload: ForgotPasswordData): Promise<{ message: string }> {
+    const { message } = await authFetch("forgot-password", post(payload), "The reset link could not be sent.");
+    return { message };
+  },
 
-    const emailExists = users.some((user) => user.email.toLowerCase() === payload.email.toLowerCase());
-    if (emailExists) {
-      throw new Error("This email is already in use. Please use a different email address.");
-    }
+  /** Sets a new password from an emailed link and signs the user in. */
+  async resetPassword(payload: ResetPasswordData): Promise<{ message: string; user: AuthUser }> {
+    return authRequest("reset-password", post(payload), "Your password could not be reset.");
+  },
 
-    const newUser = {
-      id: `usr_${Math.random().toString(36).substr(2, 9)}`,
-      fullName: payload.name,
-      name: payload.name, // Keep for fallback compatibility
-      email: payload.email,
-      phone: payload.phone,
-      password: payload.password,
-      role: payload.role || "student",
-      createdAt: new Date().toISOString(),
-    };
+  async verifyEmail(token: string): Promise<{ message: string }> {
+    const { message } = await authFetch("verify-email", post({ token }), "Your email could not be confirmed.");
+    return { message };
+  },
 
-    if (typeof window !== "undefined") {
-      users.push(newUser);
-      localStorage.setItem("wale_mock_registered_users", JSON.stringify(users));
-    }
+  async resendVerification(): Promise<{ message: string }> {
+    const { message } = await authFetch("resend-verification", post({}), "The link could not be sent.");
+    return { message };
+  },
 
-    const authUser: AuthUser = {
-      id: newUser.id,
-      fullName: newUser.fullName,
-      email: newUser.email,
-      phone: newUser.phone,
-      role: newUser.role,
-      createdAt: newUser.createdAt,
-    };
+  async changePassword(payload: ChangePasswordData): Promise<{ message: string; user: AuthUser }> {
+    return authRequest("change-password", post(payload), "Your password could not be changed.");
+  },
 
-    return {
-      message: "Account created successfully!",
-      user: authUser,
-      token: "mock_jwt_token_header_payload_signature",
-    };
+  async logout(): Promise<void> {
+    await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" });
+  },
+
+  /**
+   * The signed-in user, or `null` when there is no valid session.
+   */
+  async me(): Promise<AuthUser | null> {
+    const response = await fetch("/api/auth/me", { credentials: "same-origin", cache: "no-store" });
+    if (response.status === 401) return null;
+    if (!response.ok) throw new Error("Your session could not be checked. Please try again.");
+
+    const result: unknown = await response.json();
+    const user = authUserSchema.safeParse(
+      typeof result === "object" && result !== null && "user" in result ? result.user : null,
+    );
+    if (!user.success) throw new Error("The server returned an invalid account response.");
+    return user.data;
   },
 };

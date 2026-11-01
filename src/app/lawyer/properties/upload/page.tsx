@@ -15,11 +15,13 @@ import {
   CardTitle,
   toast,
 } from "@/components/ui";
+import { PropertyImagePicker, type PickedImage } from "@/components/property/PropertyImagePicker";
 import { propertyApi } from "@/lib/api/property";
 
 export default function LawyerUploadPropertyPage() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
+  const [images, setImages] = useState<PickedImage[]>([]);
   const [propertyName, setPropertyName] = useState("");
   const [landlordName, setLandlordName] = useState("");
   const [price, setPrice] = useState("");
@@ -33,6 +35,11 @@ export default function LawyerUploadPropertyPage() {
       return;
     }
 
+    if (images.length === 0) {
+      toast.error("Add a photo", { description: "Add at least one photo of the property." });
+      return;
+    }
+
     try {
       setIsLoading(true);
 
@@ -40,7 +47,7 @@ export default function LawyerUploadPropertyPage() {
         title: propertyName,
         description: `Verified listing submitted on behalf of the property owner ${landlordName} by their legal representative.`,
         price: Number(price),
-        type: "two_bedroom",
+        type: "flat",
         bedrooms: 2,
         bathrooms: 2,
         address: location,
@@ -48,17 +55,9 @@ export default function LawyerUploadPropertyPage() {
         state: "Kwara",
         university: "unilorin",
         availableDate: new Date().toISOString().split("T")[0],
-        images: [
-          "/listings/listing-03.jpg",
-          "/listings/listing-04.jpg",
-        ],
         amenities: ["Prepaid meter", "Water borehole", "Gated compound"],
-        source: "lawyer",
-        landlord: {
-          name: landlordName,
-          phone: "+2348000000000",
-        },
-      });
+        contactName: landlordName,
+      }, images.map((image) => image.file));
 
       toast.success("Listing submitted", {
         description: "The property listing has been submitted successfully and is pending review.",
@@ -166,6 +165,11 @@ export default function LawyerUploadPropertyPage() {
                     className="h-11 rounded-field border border-ink-200 px-4 text-sm"
                     placeholder="Enter location"
                   />
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <p className="text-sm font-medium text-ink-800">Photos</p>
+                  <PropertyImagePicker images={images} onChange={setImages} disabled={isLoading} />
                 </div>
 
                 <Button type="submit" isLoading={isLoading} loadingText="Submitting...">

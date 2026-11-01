@@ -212,6 +212,12 @@ function formatRouteDuration(seconds: number) {
   return remainingMinutes ? `${hours} hr ${remainingMinutes} min` : `${hours} hr`;
 }
 
+/**
+ * Before a search, the map opens on Ilorin — between the city centre and the
+ * Tanke / UNILORIN student area, where most WALE listings are.
+ */
+const DEFAULT_VIEW = { center: [8.4905, 4.5850] as [number, number], zoom: 12 };
+
 export function MapSearch({ initialLocation = "" }: { initialLocation?: string }) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapInstance = useRef<LeafletMap | null>(null);
@@ -600,8 +606,8 @@ export function MapSearch({ initialLocation = "" }: { initialLocation?: string }
 
         leaflet.current = L;
         map = L.map(mapElement, { scrollWheelZoom: false }).setView(
-          [9.1, 8.6753],
-          6,
+          DEFAULT_VIEW.center,
+          DEFAULT_VIEW.zoom,
         );
         L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
           attribution:
@@ -658,7 +664,7 @@ export function MapSearch({ initialLocation = "" }: { initialLocation?: string }
         .bindPopup(searchPopup)
         .addTo(markers);
     } else {
-      map.setView([9.1, 8.6753], 6);
+      map.setView(DEFAULT_VIEW.center, DEFAULT_VIEW.zoom);
     }
 
     for (const property of properties) {

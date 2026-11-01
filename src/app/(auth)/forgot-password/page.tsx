@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
+import { useMutation } from "@tanstack/react-query";
+import { authApi } from "@/lib/api/auth";
+import { forgotPasswordSchema, type ForgotPasswordData } from "@/lib/api/schemas";
 import {
   Button,
   FormField,
@@ -13,17 +14,7 @@ import {
   toast,
 } from "@/components/ui";
 
-const forgotPasswordSchema = z.object({
-  email: z.string().email("Invalid email address"),
-});
-
-type ForgotPasswordData = z.infer<typeof forgotPasswordSchema>;
-
 export default function ForgotPasswordPage() {
-  const [isPending, setIsPending] = useState(false);
-  const [isSuccess, setIsSuccess] = useState(false);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-
   const {
     register,
     handleSubmit,
@@ -33,30 +24,14 @@ export default function ForgotPasswordPage() {
     mode: "onBlur",
   });
 
-  const onSubmit = async (values: ForgotPasswordData) => {
-    setIsPending(true);
-    setErrorMsg(null);
-    setIsSuccess(false);
-
-    try {
-      // Mock API call to simulate sending a reset email
-      await new Promise((resolve) => setTimeout(resolve, 1200));
-
-      if (values.email === "error@example.com") {
-        throw new Error("This email is not registered with WALE.");
-      }
-
-      setIsSuccess(true);
-      toast.success("Reset link sent!", {
-        description: "Please check your inbox for instructions.",
+  const mutation = useMutation({
+    mutationFn: authApi.forgotPassword,
+    onSuccess: () => {
+      toast.success("Check your email", {
+        description: "If an account exists, a reset link is on its way.",
       });
-    } catch (err: any) {
-      setErrorMsg(err.message || "Something went wrong.");
-      toast.error("Couldn't send link", { description: err.message });
-    } finally {
-      setIsPending(false);
-    }
-  };
+    },
+  });
 
   return (
     <div className="flex flex-col gap-6">
@@ -69,25 +44,27 @@ export default function ForgotPasswordPage() {
         </p>
       </div>
 
-      {errorMsg && (
-        <Alert tone="danger" title="Error">
-          {errorMsg}
+      {mutation.isError && (
+        <Alert tone="danger" title="Couldn't send link">
+          {mutation.error.message}
         </Alert>
       )}
 
-      {isSuccess ? (
+      {mutation.isSuccess ? (
         <div className="flex flex-col gap-5">
           <Alert tone="success" title="Check your email">
-            We have sent a password reset link to your email. Please check your inbox and spam folders.
+            If an account exists for {mutation.variables.email}, we&apos;ve sent a link to
+            reset the password. It expires in 1 hour — check your spam folder if you
+            don&apos;t see it.
           </Alert>
 
-          <Button tone="outline" block onClick={() => setIsSuccess(false)}>
+          <Button tone="outline" block onClick={() => mutation.reset()}>
             Send link again
           </Button>
         </div>
       ) : (
         <form
-          onSubmit={handleSubmit(onSubmit)}
+          onSubmit={handleSubmit((values) => mutation.mutate(values))}
           noValidate
           className="flex flex-col gap-5"
         >
@@ -107,7 +84,7 @@ export default function ForgotPasswordPage() {
             type="submit"
             size="lg"
             block
-            isLoading={isPending}
+            isLoading={mutation.isPending}
             loadingText="Sending link..."
             className="mt-2"
           >

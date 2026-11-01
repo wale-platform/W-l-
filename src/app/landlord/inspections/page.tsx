@@ -12,7 +12,7 @@ export default function InspectionsPage() {
   // Fetch inspections
   const { data: inspections, isLoading } = useQuery({
     queryKey: ["landlordInspections"],
-    queryFn: () => inspectionsApi.listRequests(),
+    queryFn: () => inspectionsApi.listRequests("owner"),
   });
 
   // Update inspection mutation

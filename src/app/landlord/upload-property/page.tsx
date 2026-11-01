@@ -2,97 +2,102 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Container,
   Section,
   SectionHeading,
 } from "@/components/layout/Container";
 import {
+  Alert,
   Button,
   Card,
   CardBody,
   CardHeader,
   CardTitle,
+  FormField,
+  Input,
+  Select,
+  Textarea,
   toast,
 } from "@/components/ui";
+import { PropertyImagePicker, type PickedImage } from "@/components/property/PropertyImagePicker";
 import { propertyApi } from "@/lib/api/property";
+import { PROPERTY_TYPES, propertyInputSchema } from "@/lib/api/schemas";
+import { todayDateInputValue } from "@/lib/utils/format";
+import { useSession } from "@/lib/auth/client-session";
+import { universities } from "@/config/site";
+
+const uploadFormSchema = propertyInputSchema
+  .omit({ amenities: true, contactName: true })
+  .extend({
+    amenities: z.string().max(1000).optional(),
+    // Blank means "use the phone on my account".
+    contactPhone: propertyInputSchema.shape.contactPhone.or(z.literal("")),
+  });
+
+type UploadFormValues = z.input<typeof uploadFormSchema>;
+type UploadFormOutput = z.output<typeof uploadFormSchema>;
 
 export default function UploadPropertyPage() {
   const router = useRouter();
-  const [isLoading, setIsLoading] = useState(false);
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [price, setPrice] = useState("");
-  const [type, setType] = useState("");
-  const [bedrooms, setBedrooms] = useState("");
-  const [bathrooms, setBathrooms] = useState("");
-  const [address, setAddress] = useState("");
-  const [city, setCity] = useState("");
-  const [state, setState] = useState("");
-  const [university, setUniversity] = useState("");
-  const [availableDate, setAvailableDate] = useState("");
-  const [amenities, setAmenities] = useState("");
+  const queryClient = useQueryClient();
+  const { data: user } = useSession();
+  const [images, setImages] = useState<PickedImage[]>([]);
+  const [imagesError, setImagesError] = useState("");
 
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<UploadFormValues, unknown, UploadFormOutput>({
+    resolver: zodResolver(uploadFormSchema),
+    mode: "onBlur",
+    defaultValues: {
+      availableDate: todayDateInputValue(),
+      bedrooms: 1,
+      bathrooms: 1,
+      state: "Kwara",
+      contactPhone: user?.phone ?? "",
+    },
+  });
 
-    if (
-      !title ||
-      !description ||
-      !price ||
-      !type ||
-      !bedrooms ||
-      !bathrooms ||
-      !address ||
-      !city ||
-      !state ||
-      !availableDate
-    ) {
-      toast.error("Missing fields", { description: "Please fill in all required fields." });
-      return;
-    }
-
-    try {
-      setIsLoading(true);
-
-      await propertyApi.create({
-        title,
-        description,
-        price: Number(price),
-        type: type as any,
-        bedrooms: Number(bedrooms),
-        bathrooms: Number(bathrooms),
-        address,
-        city,
-        state,
-        university: university || undefined,
-        availableDate,
-        images: [
-          "/listings/listing-01.jpg",
-          "/listings/listing-02.jpg",
-        ],
-        amenities: amenities
-          .split(",")
-          .map((item) => item.trim())
-          .filter(Boolean),
-        source: "landlord",
-        landlord: {
-          name: "Alhaji Kolawole",
-          phone: "+2348039998887",
+  const mutation = useMutation({
+    mutationFn: ({ amenities, ...values }: UploadFormOutput) =>
+      propertyApi.create(
+        {
+          ...values,
+          university: values.university || undefined,
+          contactPhone: values.contactPhone || undefined,
+          amenities: (amenities ?? "")
+            .split(",")
+            .map((item) => item.trim())
+            .filter(Boolean),
         },
-      });
-
+        images.map((image) => image.file),
+      ),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["myProperties"] });
+      void queryClient.invalidateQueries({ queryKey: ["properties"] });
       toast.success("Listing submitted", {
         description: "Your property listing has been submitted and is pending verification.",
       });
-      router.push("/landlord");
-    } catch (err: any) {
-      toast.error("Submission failed", {
-        description: err.message || "An error occurred while uploading the property.",
-      });
-    } finally {
-      setIsLoading(false);
+      router.push("/landlord/properties");
+    },
+    onError: (error: Error) => {
+      toast.error("Submission failed", { description: error.message });
+    },
+  });
+
+  const onSubmit = (values: UploadFormOutput) => {
+    if (images.length === 0) {
+      setImagesError("Add at least one photo of the property.");
+      return;
     }
+    mutation.mutate(values);
   };
 
   return (
@@ -115,284 +120,165 @@ export default function UploadPropertyPage() {
 
             <CardBody>
               <form
-                onSubmit={handleSubmit}
+                onSubmit={handleSubmit(onSubmit, () => {
+                  if (images.length === 0) setImagesError("Add at least one photo of the property.");
+                })}
+                noValidate
                 className="flex flex-col gap-6"
               >
-                {/* Property Title */}
-                <div className="flex flex-col gap-2">
-                  <label
-                    htmlFor="title"
-                    className="text-sm font-medium text-ink-800"
-                  >
-                    Property Title
-                  </label>
+                {mutation.isError && (
+                  <Alert tone="danger" title="Submission failed">
+                    {mutation.error.message}
+                  </Alert>
+                )}
 
-                  <input
-                    id="title"
-                    name="title"
-                    type="text"
-                    placeholder="e.g. Spacious 2 Bedroom Flat"
-                    value={title}
-                    onChange={(event) => setTitle(event.target.value)}
-                    className="h-11 rounded-field border border-ink-200 px-4 text-sm outline-none focus:border-brand-600"
-                  />
-                </div>
+                <FormField label="Property title" required error={errors.title?.message}>
+                  {(field) => (
+                    <Input {...field} {...register("title")} placeholder="e.g. Spacious 2 Bedroom Flat" />
+                  )}
+                </FormField>
 
-                {/* Description */}
-                <div className="flex flex-col gap-2">
-                  <label
-                    htmlFor="description"
-                    className="text-sm font-medium text-ink-800"
-                  >
-                    Description
-                  </label>
+                <FormField
+                  label="Description"
+                  required
+                  hint="Describe the rooms, water and power supply, and distance to campus."
+                  error={errors.description?.message}
+                >
+                  {(field) => (
+                    <Textarea {...field} {...register("description")} placeholder="Describe the property..." />
+                  )}
+                </FormField>
 
-                  <textarea
-                    id="description"
-                    name="description"
-                    rows={5}
-                    placeholder="Describe the property..."
-                    value={description}
-                    onChange={(event) =>
-                      setDescription(event.target.value)
-                    }
-                    className="rounded-field border border-ink-200 p-4 text-sm outline-none focus:border-brand-600"
-                  />
-                </div>
-
-                {/* Price and Type */}
-                <div className="grid gap-6 md:grid-cols-2">
-                  <div className="flex flex-col gap-2">
-                    <label
-                      htmlFor="price"
-                      className="text-sm font-medium text-ink-800"
-                    >
-                      Rent
-                    </label>
-
-                    <input
-                      id="price"
-                      name="price"
-                      type="number"
-                      placeholder="e.g. 500000"
-                      value={price}
-                      onChange={(event) => setPrice(event.target.value)}
-                      className="h-11 rounded-field border border-ink-200 px-4 text-sm outline-none focus:border-brand-600"
-                    />
-                  </div>
-
-                  <div className="flex flex-col gap-2">
-                    <label
-                      htmlFor="type"
-                      className="text-sm font-medium text-ink-800"
-                    >
-                      Apartment Type
-                    </label>
-
-                    <select
-                      id="type"
-                      name="type"
-                      value={type}
-                      onChange={(event) => setType(event.target.value)}
-                      className="h-11 rounded-field border border-ink-200 bg-white px-4 text-sm outline-none focus:border-brand-600"
-                    >
-                      <option value="">Select type</option>
-                      <option value="studio">Studio</option>
-                      <option value="one_bedroom">1 Bedroom</option>
-                      <option value="two_bedroom">2 Bedroom</option>
-                      <option value="shared">Shared</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* Bedrooms and Bathrooms */}
-                <div className="grid gap-6 md:grid-cols-2">
-                  <div className="flex flex-col gap-2">
-                    <label
-                      htmlFor="bedrooms"
-                      className="text-sm font-medium text-ink-800"
-                    >
-                      Number of Bedrooms
-                    </label>
-
-                    <input
-                      id="bedrooms"
-                      name="bedrooms"
-                      type="number"
-                      min="0"
-                      placeholder="e.g. 2"
-                      value={bedrooms}
-                      onChange={(event) =>
-                        setBedrooms(event.target.value)
-                      }
-                      className="h-11 rounded-field border border-ink-200 px-4 text-sm outline-none focus:border-brand-600"
-                    />
-                  </div>
-
-                  <div className="flex flex-col gap-2">
-                    <label
-                      htmlFor="bathrooms"
-                      className="text-sm font-medium text-ink-800"
-                    >
-                      Number of Bathrooms
-                    </label>
-
-                    <input
-                      id="bathrooms"
-                      name="bathrooms"
-                      type="number"
-                      min="1"
-                      placeholder="e.g. 2"
-                      value={bathrooms}
-                      onChange={(event) =>
-                        setBathrooms(event.target.value)
-                      }
-                      className="h-11 rounded-field border border-ink-200 px-4 text-sm outline-none focus:border-brand-600"
-                    />
-                  </div>
-                </div>
-
-                {/* Address */}
-                <div className="flex flex-col gap-2">
-                  <label
-                    htmlFor="address"
-                    className="text-sm font-medium text-ink-800"
-                  >
-                    Full Address
-                  </label>
-
-                  <input
-                    id="address"
-                    name="address"
-                    type="text"
-                    placeholder="e.g. 12 University Road"
-                    value={address}
-                    onChange={(event) => setAddress(event.target.value)}
-                    className="h-11 rounded-field border border-ink-200 px-4 text-sm outline-none focus:border-brand-600"
-                  />
-                </div>
-
-                {/* City and State */}
-                <div className="grid gap-6 md:grid-cols-2">
-                  <div className="flex flex-col gap-2">
-                    <label
-                      htmlFor="city"
-                      className="text-sm font-medium text-ink-800"
-                    >
-                      City
-                    </label>
-
-                    <input
-                      id="city"
-                      name="city"
-                      type="text"
-                      placeholder="e.g. Ilorin"
-                      value={city}
-                      onChange={(event) => setCity(event.target.value)}
-                      className="h-11 rounded-field border border-ink-200 px-4 text-sm outline-none focus:border-brand-600"
-                    />
-                  </div>
-
-                  <div className="flex flex-col gap-2">
-                    <label
-                      htmlFor="state"
-                      className="text-sm font-medium text-ink-800"
-                    >
-                      State
-                    </label>
-
-                    <input
-                      id="state"
-                      name="state"
-                      type="text"
-                      placeholder="e.g. Kwara"
-                      value={state}
-                      onChange={(event) => setState(event.target.value)}
-                      className="h-11 rounded-field border border-ink-200 px-4 text-sm outline-none focus:border-brand-600"
-                    />
-                  </div>
-                </div>
-
-                {/* University */}
-                <div className="flex flex-col gap-2">
-                  <label
-                    htmlFor="university"
-                    className="text-sm font-medium text-ink-800"
-                  >
-                    Nearby University
-                  </label>
-
-                  <input
-                    id="university"
-                    name="university"
-                    type="text"
-                    placeholder="e.g. University of Ilorin"
-                    value={university}
-                    onChange={(event) =>
-                      setUniversity(event.target.value)
-                    }
-                    className="h-11 rounded-field border border-ink-200 px-4 text-sm outline-none focus:border-brand-600"
-                  />
-                </div>
-
-                {/* Available Date */}
-                <div className="flex flex-col gap-2">
-                  <label
-                    htmlFor="availableDate"
-                    className="text-sm font-medium text-ink-800"
-                  >
-                    Available Date
-                  </label>
-
-                  <input
-                    id="availableDate"
-                    name="availableDate"
-                    type="date"
-                    value={availableDate}
-                    onChange={(event) =>
-                      setAvailableDate(event.target.value)
-                    }
-                    className="h-11 rounded-field border border-ink-200 px-4 text-sm outline-none focus:border-brand-600"
-                  />
-                </div>
-
-                {/* Amenities */}
-                <div className="flex flex-col gap-2">
-                  <label
-                    htmlFor="amenities"
-                    className="text-sm font-medium text-ink-800"
-                  >
-                    Amenities
-                  </label>
-
-                  <input
-                    id="amenities"
-                    name="amenities"
-                    type="text"
-                    placeholder="e.g. Water, Parking, Security"
-                    value={amenities}
-                    onChange={(event) =>
-                      setAmenities(event.target.value)
-                    }
-                    className="h-11 rounded-field border border-ink-200 px-4 text-sm outline-none focus:border-brand-600"
-                  />
-
-                  <p className="text-xs text-ink-500">
-                    Separate amenities with commas.
+                <div className="flex flex-col gap-1.5">
+                  <p className="text-sm font-medium text-ink-800">
+                    Photos<span className="ml-0.5 text-danger" aria-hidden="true">*</span>
                   </p>
+                  <PropertyImagePicker
+                    images={images}
+                    onChange={(next) => {
+                      setImages(next);
+                      if (next.length) setImagesError("");
+                    }}
+                    error={imagesError}
+                    disabled={mutation.isPending}
+                  />
                 </div>
 
-                {/* Buttons */}
+                <div className="grid gap-6 md:grid-cols-2">
+                  <FormField label="Yearly rent (₦)" required error={errors.price?.message}>
+                    {(field) => (
+                      <Input
+                        {...field}
+                        {...register("price")}
+                        type="number"
+                        inputMode="numeric"
+                        min={1}
+                        placeholder="e.g. 500000"
+                      />
+                    )}
+                  </FormField>
+
+                  <FormField label="Apartment type" required error={errors.type?.message}>
+                    {(field) => (
+                      <Select {...field} {...register("type")} defaultValue="">
+                        <option value="" disabled>Select type</option>
+                        {PROPERTY_TYPES.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </Select>
+                    )}
+                  </FormField>
+                </div>
+
+                <div className="grid gap-6 md:grid-cols-2">
+                  <FormField label="Number of bedrooms" required error={errors.bedrooms?.message}>
+                    {(field) => (
+                      <Input {...field} {...register("bedrooms")} type="number" inputMode="numeric" min={0} />
+                    )}
+                  </FormField>
+
+                  <FormField label="Number of bathrooms" required error={errors.bathrooms?.message}>
+                    {(field) => (
+                      <Input {...field} {...register("bathrooms")} type="number" inputMode="numeric" min={1} />
+                    )}
+                  </FormField>
+                </div>
+
+                <FormField label="Full address" required error={errors.address?.message}>
+                  {(field) => (
+                    <Input {...field} {...register("address")} autoComplete="street-address" placeholder="e.g. 12 University Road, Tanke" />
+                  )}
+                </FormField>
+
+                <div className="grid gap-6 md:grid-cols-2">
+                  <FormField label="City" required error={errors.city?.message}>
+                    {(field) => <Input {...field} {...register("city")} placeholder="e.g. Ilorin" />}
+                  </FormField>
+
+                  <FormField label="State" required error={errors.state?.message}>
+                    {(field) => <Input {...field} {...register("state")} placeholder="e.g. Kwara" />}
+                  </FormField>
+                </div>
+
+                <div className="grid gap-6 md:grid-cols-2">
+                  <FormField label="Nearby university" error={errors.university?.message}>
+                    {(field) => (
+                      <Select {...field} {...register("university")} defaultValue="">
+                        <option value="">Not near a listed university</option>
+                        {universities.map((university) => (
+                          <option key={university.id} value={university.id}>
+                            {university.name}
+                          </option>
+                        ))}
+                      </Select>
+                    )}
+                  </FormField>
+
+                  <FormField label="Available from" required error={errors.availableDate?.message}>
+                    {(field) => <Input {...field} {...register("availableDate")} type="date" />}
+                  </FormField>
+                </div>
+
+                <FormField
+                  label="Amenities"
+                  hint="Separate amenities with commas."
+                  error={errors.amenities?.message}
+                >
+                  {(field) => (
+                    <Input {...field} {...register("amenities")} placeholder="e.g. Water, Parking, Security" />
+                  )}
+                </FormField>
+
+                <FormField
+                  label="Contact phone"
+                  required={!user?.phone}
+                  hint="Students will use this number to reach you about the property."
+                  error={errors.contactPhone?.message}
+                >
+                  {(field) => (
+                    <Input
+                      {...field}
+                      {...register("contactPhone")}
+                      type="tel"
+                      autoComplete="tel"
+                      placeholder="08012345678"
+                    />
+                  )}
+                </FormField>
+
                 <div className="flex justify-end gap-3">
                   <Button
                     tone="outline"
                     type="button"
                     onClick={() => router.push("/landlord")}
+                    disabled={mutation.isPending}
                   >
                     Cancel
                   </Button>
 
-                  <Button type="submit" isLoading={isLoading} loadingText="Submitting...">
+                  <Button type="submit" isLoading={mutation.isPending} loadingText="Submitting...">
                     Submit Property
                   </Button>
                 </div>

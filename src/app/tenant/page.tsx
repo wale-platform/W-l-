@@ -10,8 +10,8 @@ import { Plus, Home, Clock, Calendar } from "lucide-react";
 export default function TenantDashboardPage() {
   // Fetch tenant properties
   const { data, isLoading } = useQuery({
-    queryKey: ["tenantProperties"],
-    queryFn: () => propertyApi.list({ source: "tenant" }),
+    queryKey: ["myProperties"],
+    queryFn: () => propertyApi.listMine(),
   });
 
   const properties = data?.properties || [];
