@@ -1,3 +1,4 @@
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { OAuth2Client } from "google-auth-library";
 import type { SignUpRole } from "@/lib/api/schemas";
 import { getSql } from "./db";
@@ -107,4 +108,46 @@ export async function findOrCreateGoogleUser(
     link: "/account",
   });
   return { ok: true, user: created[0] };
+}
+
+/* --------------------------------------------- Sign-in → sign-up hand-off -- */
+
+/**
+ * When someone signs in with a Google account that has no WALE account,
+ * their verified Google profile is kept for 15 minutes in this httpOnly
+ * cookie (HMAC-signed with the client secret, so it can't be forged or
+ * edited) and they're sent to /signup to pick an account type — no second
+ * trip to Google needed.
+ */
+export const GOOGLE_PENDING_COOKIE = "wale_google_pending";
+export const GOOGLE_PENDING_MAX_AGE = 15 * 60;
+
+function pendingSignature(payload: string): string {
+  const secret = process.env.GOOGLE_CLIENT_SECRET;
+  if (!secret) throw new Error("GOOGLE_CLIENT_SECRET is not configured");
+  return createHmac("sha256", `wale-google-pending:${secret}`).update(payload).digest("base64url");
+}
+
+export function sealPendingProfile(profile: GoogleProfile): string {
+  const payload = Buffer.from(
+    JSON.stringify({ ...profile, exp: Date.now() + GOOGLE_PENDING_MAX_AGE * 1000 }),
+  ).toString("base64url");
+  return `${payload}.${pendingSignature(payload)}`;
+}
+
+export function openPendingProfile(value: string | undefined): GoogleProfile | null {
+  if (!value) return null;
+  const [payload, signature] = value.split(".");
+  if (!payload || !signature) return null;
+  try {
+    const expected = Buffer.from(pendingSignature(payload));
+    const given = Buffer.from(signature);
+    if (expected.length !== given.length || !timingSafeEqual(expected, given)) return null;
+    const data = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as GoogleProfile & { exp: number };
+    if (typeof data.exp !== "number" || data.exp < Date.now()) return null;
+    if (typeof data.sub !== "string" || typeof data.email !== "string" || typeof data.fullName !== "string") return null;
+    return { sub: data.sub, email: data.email, fullName: data.fullName };
+  } catch {
+    return null;
+  }
 }

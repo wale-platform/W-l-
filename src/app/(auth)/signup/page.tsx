@@ -11,6 +11,7 @@ import { signUpFormSchema, type SignUpFormData } from "@/lib/api/schemas";
 import { authApi } from "@/lib/api/auth";
 import { dashboardPath, useSetSessionUser } from "@/lib/auth/client-session";
 import { GoogleAuthError } from "@/components/auth/GoogleAuthError";
+import { GoogleContinue } from "@/components/auth/GoogleContinue";
 import { GoogleSignInButton } from "@/components/auth/GoogleSignInButton";
 import {
   Button,
@@ -109,6 +110,7 @@ export default function SignUpPage() {
 
       <Suspense fallback={null}>
         <GoogleAuthError />
+        <GoogleContinue role={selectedRole} />
       </Suspense>
 
       {mutation.isError && (

@@ -11,10 +11,17 @@ import { useSession } from "@/lib/auth/client-session";
  * everywhere (browsing homes, the map, About…); visitors get the marketing
  * navbar. The page itself is the same either way.
  */
-export function SiteChrome({ children }: { children: ReactNode }) {
+export function SiteChrome({
+  children,
+  marketingOnly = false,
+}: {
+  children: ReactNode;
+  /** Always use the public navbar, even when signed in (the home page). */
+  marketingOnly?: boolean;
+}) {
   const { data: user } = useSession();
 
-  if (user) {
+  if (user && !marketingOnly) {
     return (
       <AppShell user={user} padded={false} footer={<Footer />}>
         {children}

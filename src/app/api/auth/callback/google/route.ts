@@ -5,9 +5,12 @@ import { ensureSchema } from "@/lib/server/db";
 import {
   findOrCreateGoogleUser,
   getGoogleConfig,
+  GOOGLE_PENDING_COOKIE,
+  GOOGLE_PENDING_MAX_AGE,
   GOOGLE_STATE_COOKIE,
   GOOGLE_STATE_COOKIE_PATH,
   googleClient,
+  sealPendingProfile,
   safeNextPath,
 } from "@/lib/server/google";
 import { createSession } from "@/lib/server/session";
@@ -121,8 +124,19 @@ export async function GET(request: NextRequest) {
       pending.mode === "signup" ? pending.role ?? "student" : null,
     );
     if (!result.ok) {
-      // Unknown Google account on the login page: let them pick an account type.
-      if (result.reason === "no_account") return fail("google_no_account", "/signup");
+      // Unknown Google account on the login page: go straight to sign-up with
+      // the verified profile kept, so they only pick an account type.
+      if (result.reason === "no_account") {
+        const response = finish("/signup?google=continue");
+        response.cookies.set(GOOGLE_PENDING_COOKIE, sealPendingProfile(profile), {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "lax",
+          path: GOOGLE_STATE_COOKIE_PATH,
+          maxAge: GOOGLE_PENDING_MAX_AGE,
+        });
+        return response;
+      }
       return fail(result.reason === "suspended" ? "google_suspended" : "google_linked_elsewhere");
     }
 

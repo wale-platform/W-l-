@@ -16,7 +16,8 @@ const check = (label, ok, extra = "") => { ok ? pass++ : fail++; console.log(`${
 async function call(cookie, method, path, body, headers = {}) {
   const res = await fetch(B + path, {
     method, redirect: "manual",
-    headers: { ...(body && typeof body === "string" ? {} : body ? { "Content-Type": "application/json" } : {}), ...(cookie ? { Cookie: cookie } : {}), ...headers },
+    // FormData must set its own multipart boundary; strings set their own type via `headers`.
+    headers: { ...(body && !(body instanceof FormData) && typeof body !== "string" ? { "Content-Type": "application/json" } : {}), ...(cookie ? { Cookie: cookie } : {}), ...headers },
     body: body instanceof FormData ? body : typeof body === "string" ? body : body ? JSON.stringify(body) : undefined,
   });
   const text = await res.text();

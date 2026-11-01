@@ -42,7 +42,11 @@ export function Navbar() {
     <header className="sticky top-0 z-40 border-b border-ink-100 bg-white/85 backdrop-blur-md">
       <Container size="wide">
         <div className="flex h-16 items-center justify-between gap-6 lg:h-18">
-          <Link href="/" className="rounded-field" aria-label="WALE Housing — home">
+          <Link
+            href={user ? dashboardPath(user.role) : "/"}
+            className="rounded-field"
+            aria-label={user ? "Go to your dashboard" : "WALE Housing — home"}
+          >
             <Logo />
           </Link>
 

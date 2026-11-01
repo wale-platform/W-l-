@@ -119,7 +119,7 @@ const journeySteps = [
 
 export default function HomePage() {
   return (
-    <SiteChrome>
+    <SiteChrome marketingOnly>
       <div className="bg-white text-ink-900">
         <section className="relative isolate overflow-hidden bg-gradient-to-br from-[#fff8fb] via-[#fdf1f5] to-[#f7e3eb]">
           <div

@@ -11,7 +11,7 @@ import { Avatar, ConfirmDialog } from "@/components/ui";
 import { activeHref, navigationFor, type NavSection } from "@/config/app-navigation";
 import type { AuthUser } from "@/lib/api/auth";
 import { walletApi } from "@/lib/api/wallet";
-import { useLogout } from "@/lib/auth/client-session";
+import { dashboardPath, useLogout } from "@/lib/auth/client-session";
 import { cn } from "@/lib/utils/cn";
 import { formatNaira } from "@/lib/utils/format";
 import { NotificationsMenu } from "./NotificationsMenu";
@@ -66,7 +66,7 @@ export function AppShell({
       {/* Desktop sidebar: fixed, always visible, scrolls on its own. */}
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-ink-200 bg-white lg:flex">
         <div className="flex h-16 shrink-0 items-center border-b border-ink-100 px-6">
-          <Link href="/" aria-label="WALE Housing home">
+          <Link href={dashboardPath(user.role)} aria-label="Go to your dashboard">
             <Logo />
           </Link>
         </div>
@@ -223,7 +223,7 @@ function AppHeader({
       >
         <Menu className="size-6" />
       </button>
-      <Link href="/" aria-label="WALE Housing home" className="lg:hidden">
+      <Link href={dashboardPath(user.role)} aria-label="Go to your dashboard" className="lg:hidden">
         <Logo />
       </Link>
 

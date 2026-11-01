@@ -5,8 +5,10 @@ import { Mail, MapPin, Phone } from "lucide-react";
 import { Logo } from "@/components/brand/Logo";
 import { Container } from "./Container";
 import { siteConfig, footerNav } from "@/config/site";
+import { dashboardPath, useSession } from "@/lib/auth/client-session";
 
 export function Footer() {
+  const { data: user } = useSession();
   const year = new Date().getFullYear();
 
   return (
@@ -14,7 +16,11 @@ export function Footer() {
       <Container size="wide">
         <div className="grid gap-10 py-14 md:grid-cols-2 lg:grid-cols-5 lg:gap-8">
           <div className="flex flex-col gap-4 lg:col-span-2">
-            <Link href="/" aria-label="WALE Housing — home" className="w-fit rounded-field">
+            <Link
+              href={user ? dashboardPath(user.role) : "/"}
+              aria-label={user ? "Go to your dashboard" : "WALE Housing — home"}
+              className="w-fit rounded-field"
+            >
               <Logo />
             </Link>
             <p className="max-w-sm text-sm leading-6 text-ink-600">
