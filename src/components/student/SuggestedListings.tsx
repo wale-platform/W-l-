@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, Sparkles } from "lucide-react";
 import { PropertyCard, PropertyCardSkeleton } from "@/components/property/PropertyCard";
@@ -9,7 +9,8 @@ import { useProperties } from "@/hooks/useProperties";
 import type { Property } from "@/lib/api/schemas";
 import { formatNaira } from "@/lib/utils/format";
 
-const SHOW = 6;
+/** Suggestions shown at first, and added each time the list grows. */
+const PAGE = 6;
 
 export interface SuggestionPreferences {
   university?: string;
@@ -79,10 +80,30 @@ export function rankSuggestions(
 /** "Suggested for you" — shown first on the student dashboard. */
 export function SuggestedListings({ preferences, now }: { preferences: SuggestionPreferences; now: number }) {
   const { data, isPending, isError } = useProperties({ pageSize: 50 });
-  const suggestions = useMemo(
-    () => (data ? rankSuggestions(data.properties, preferences, now).slice(0, SHOW) : []),
+  const ranked = useMemo(
+    () => (data ? rankSuggestions(data.properties, preferences, now) : []),
     [data, now, preferences],
   );
+  const [visible, setVisible] = useState(PAGE);
+  const suggestions = ranked.slice(0, visible);
+  const hasMore = visible < ranked.length;
+  const showMore = () => setVisible((count) => count + PAGE);
+
+  // Infinite scroll: load the next batch as the end of the list comes into
+  // view. The "Show more" button stays as a fallback (keyboard, no observer).
+  const sentinel = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const node = sentinel.current;
+    if (!node || !hasMore || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) setVisible((count) => count + PAGE);
+      },
+      { rootMargin: "300px 0px" },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [hasMore, visible]);
 
   const uni = universities.find((option) => option.id === preferences.university);
   const basis = [uni ? uni.short : null, preferences.maxBudget ? `up to ${formatNaira(preferences.maxBudget)}` : null]
@@ -136,6 +157,30 @@ export function SuggestedListings({ preferences, now }: { preferences: Suggestio
                 </li>
               ))}
         </ul>
+      )}
+
+      {!isPending && !isError && (
+        <div ref={sentinel} className="flex flex-col items-center gap-2 pt-2">
+          {hasMore ? (
+            <button
+              type="button"
+              onClick={showMore}
+              className="rounded-full border border-ink-200 bg-white px-5 py-2 text-sm font-semibold text-ink-800 transition-colors hover:border-brand-300 hover:bg-brand-50"
+            >
+              Show more homes
+              <span className="ml-1.5 text-xs font-normal text-ink-500">({ranked.length - visible} more)</span>
+            </button>
+          ) : (
+            ranked.length > PAGE && (
+              <p className="text-sm text-ink-500">
+                That&apos;s all {ranked.length} suggestions.{" "}
+                <Link href="/properties" className="font-semibold text-brand-700 hover:underline">
+                  Browse all homes
+                </Link>
+              </p>
+            )
+          )}
+        </div>
       )}
     </section>
   );
